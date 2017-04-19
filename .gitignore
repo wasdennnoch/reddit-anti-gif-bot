@@ -2,5 +2,3 @@
 .secret/
 node_modules/
 src/test.js
-src/json/linkCache.json
-src/json/stats.json
