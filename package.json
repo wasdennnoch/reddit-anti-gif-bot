@@ -1,0 +1,13 @@
+{
+  "name": "reddit-anti-gif-bot",
+  "version": "0.2.0",
+  "description": "A Reddit bot which converts all gif submissions to mp4s",
+  "main": "src/index.js",
+  "author": "MrWasdennnoch",
+  "repository": "https://github.com/wasdennnoch/reddit-anti-gif-bot",
+  "dependencies": {
+    "deasync": "^0.1.9",
+    "gfycat-sdk": "^1.2.0",
+    "snoowrap": "^1.13.0"
+  }
+}

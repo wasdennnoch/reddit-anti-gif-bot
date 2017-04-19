@@ -1,0 +1,26 @@
+{
+  "updateInterval": 15000,
+  "cacheSize": 20000,
+  "cachePurgeSize": 5000,
+  "replyTemplate": "#####[mp4 %%TYPE%%](%%MP4LINK%%)\r\n---\r\n>*Beep, I'm a bot.* [my gears and phrases of existence](https://github.com/wasdennnoch/reddit-anti-gif-bot) | [my master and commander](/u/MrWasdennnoch)",
+  "knownDomains": [
+    "giphy.com",
+    "i.gyazo.com",
+    "media.tumblr.com",
+    "i.redd.it",
+    "i.makeagif.com",
+    "thumbs.gfycat.com",
+    "giant.gfycat.com",
+    "j.gifs.com",
+    "gifgif.io"
+  ],
+  "nonDotGifDomains": [
+    "giphy.com"
+  ],
+  "ignoreDomains": [
+    "imgur.com",
+    "memecenter.com",
+    "memecdn.com"
+  ],
+  "ignoreSubreddits": []
+}

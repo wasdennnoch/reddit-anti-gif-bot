@@ -1,0 +1,4 @@
+.idea/
+.secret/
+node_modules/
+src/test.js
