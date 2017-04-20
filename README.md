@@ -1,9 +1,11 @@
 # reddit-anti-gif-bot
 
-**This bot is still undergoing testing and not yet actively submitting to Reddit**
-
 The source of [u/anti-gif-bot](https://reddit.com/u/anti-gif-bot), a bot which provides an mp4
-link/mirror for gif submissions
+link/mirror for gif submissions.
+
+*Since the bot is very new it may be ratelimited by Reddit in the first few days. Just upvote
+it so it gets enough karma to lift the limit. This is a spam prevention method from Reddit,
+I'm not begging for fake internet points.*
 
 ## Why?
 
@@ -34,4 +36,13 @@ gif submissions. If the gif domain is known for providing an mp4 version the gif
 converted to an mp4 link, otherwise a request to gfycat is made containing the gif url.
 After an mp4 link is generated (or gfycat is done converting the gif) a reply containing that
 link gets posted. That's it basically. There are a few more things such as a domain blacklist
-(the gifv-bot already covers gifs from imgur).
+(the gifv-bot already covers gifs from imgur) and an internal stats counter that keeps track
+of the amount of submissions the bot scraped, the amount of gifs, domains that host gifs etc.
+Maybe I'll eventually create a website where I make these stats available. Until then I'll
+keep them private (well, I accidentally commited a dev version but whatever, it's no secret)
+to enhance the bot and for my own curiosity.
+
+## And I?
+
+If you find any bugs or want to submit an enhancement feel free to submit a pull request and
+I'll update the bot quickly!
