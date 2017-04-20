@@ -3,7 +3,7 @@
   "saveInterval": 8,
   "cacheSize": 20000,
   "cachePurgeSize": 5000,
-  "replyTemplate": "#####[mp4 %%TYPE%%](%%MP4LINK%%)\r\n---\r\n>*Beep, I'm a bot.* [my gears and phrases of existence](https://github.com/wasdennnoch/reddit-anti-gif-bot) | [my master and commander](/u/MrWasdennnoch)",
+  "replyTemplate": "#####[mp4 %%TYPE%%](%%MP4LINK%%)\r\n---\r\n>*Beep, I'm a bot.* [source/info/feedback](https://github.com/wasdennnoch/reddit-anti-gif-bot) | [author](/u/MrWasdennnoch)",
   "knownDomains": [
     "giphy.com",
     "i.gyazo.com",
@@ -21,7 +21,18 @@
   "ignoreDomains": [
     "imgur.com",
     "memecenter.com",
-    "memecdn.com"
+    "memecdn.com",
+	"68.media.tumblr.com"
   ],
-  "ignoreSubreddits": []
+  "ignoreSubreddits": [
+    "menkissing",
+    "ManHands",
+    "AgeGap",
+    "Romania"
+  ],
+  "ignoreSubredditsPartial": [
+    "nsfw",
+    "incest",
+    "guys"
+  ]
 }
