@@ -194,7 +194,7 @@ async function update() {
                 }
             } catch (e) {
                 if (e.toString().includes('403') || e.toString().includes('forbidden'))
-                    stats.onPossibleBanError(e, post.subreddit);
+                    stats.onPossibleBanError(e, post.subreddit.display_name);
                 throw e;
             }
         }
