@@ -76,7 +76,7 @@ async function update() {
         const sorted = [];
         submissions.forEach(post => {
             if (!post.domain.startsWith('self.') && !post.over_18 && !includesPartial(ignoreDomains, post.domain)
-                && !ignoreSubreddits.includes(post.subreddit) && !includesPartial(ignoreSubredditsPartial, post.subreddit)) {
+                && !ignoreSubreddits.includes(post.subreddit.display_name) && !includesPartial(ignoreSubredditsPartial, post.subreddit.display_name)) {
                 if ((includesPartial(knownDomains, post.domain) && post.url.endsWith('.gif')) || includesPartial(nonDotGifDomains, post.domain) || post.url.endsWith('.gif')) {
                     sorted.push(post);
                     stats.onGif(post.url);
