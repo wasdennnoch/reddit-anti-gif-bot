@@ -17,6 +17,7 @@ const keys = JSON.parse(fs.readFileSync(path.join(secretPath, 'keys.json'), 'utf
 const config = JSON.parse(fs.readFileSync(configPath, 'utf8'));
 
 const updateInterval = config.updateInterval;
+const saveInterval = config.saveInterval;
 const knownDomains = config.knownDomains;
 const nonDotGifDomains = config.nonDotGifDomains;
 const ignoreDomains = config.ignoreDomains;
@@ -190,7 +191,8 @@ async function update() {
                     console.log(`Finished link: ${link}`);
                 }
             } catch (e) {
-                stats.onPossibleBanError(e, post.subreddit);
+                if (e.toString().includes('403') || e.toString().includes('forbidden'))
+                    stats.onPossibleBanError(e, post.subreddit);
                 throw e;
             }
         }
@@ -200,7 +202,7 @@ async function update() {
         stats.onLoopError(e);
     }
 
-    if (!prod || loops % 8 === 0) { // every 2 minutes (15 seconds loop interval)
+    if (!prod || loops % saveInterval === 0) {
         stats.save();
         cache.save();
     }
