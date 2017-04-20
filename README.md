@@ -13,7 +13,7 @@ As we all know gifs are a very old technique to save animated images of cute cat
 share them with the world. These images have been bringing joy to -
 ah whatever, you all know what gifs are.
 
-And as you might (should) also know gifs are HUGE. A 15 seconds long video with 25fps for
+And as you might (should) also know gifs are HUGE. A 15 seconds long 720p video with 25fps for
 example takes up 160MB as a gif! For comparison, an mp4 version of the same video only takes
 up 12.5MB. A webm even only 1.8MB. As you see there is a HUGE difference in file size. For
 the sake of us all and our data caps (and mobile users) please always submit links to mp4
