@@ -51,7 +51,7 @@ module.exports.start = () => {
     setInterval(update, updateInterval);
     update();
 };
-module.exports.start();
+module.exports.start(); // I'll change the structure a bit in the future so I already extracted the start function
 
 async function update() {
 
