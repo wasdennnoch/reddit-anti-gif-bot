@@ -193,9 +193,10 @@ async function update() {
                     console.log(`Finished link: ${link}`);
                 }
             } catch (e) {
-                if (e.toString().includes('403') || e.toString().includes('forbidden'))
+                if (e.toString().includes('403') || e.toString().includes('Forbidden'))
                     stats.onPossibleBanError(e, post.subreddit.display_name);
-                throw e;
+                else
+                    throw e;
             }
         }
 
