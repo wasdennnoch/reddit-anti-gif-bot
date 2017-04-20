@@ -93,7 +93,7 @@ class Stats {
 
     onLoopError(e) {
         console.log(`Loop error: ${e.toString()}`);
-        if (!e.toString().includes("Cannot read property 'images' of undefined") && !e.toString().includes("No items returned"))
+        if (!e.toString().includes("Cannot read property 'images' of undefined") && !e.toString().includes("No items returned") && !e.toString().includes("ratelimit"))
             console.log(e);
         if (!this.loopErrors[e.toString()])
             this.loopErrors[e.toString()] = 0;
