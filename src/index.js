@@ -109,7 +109,7 @@ async function update() {
             if (!link) {
                 link = cache.getLink(gif);
             }
-            if (link) { // Already cached
+            if (link && link !== 'https://i.giphy.com.mp4') { // Already cached (additional check because of previous parsing bug)
                 post.mp4link = link;
                 stats.onCachedGif(gif, link);
                 continue;
@@ -132,7 +132,7 @@ async function update() {
                     link = replaceGifWithMp4(gif);
                 } else { // actual website giphy.com
                     link = gif.replace('giphy.com/gifs', 'i.giphy.com');
-                    if (link.lastIndexOf('/') < link.length - 12) {
+                    if (link.lastIndexOf('/') > link.length - 12) {
                         // IDs are 13 in length, if the last / is further back than that there's something else appended
                         // (such as '/html5', '/tile', '/fullscreen')
                         link = link.substring(0, link.lastIndexOf('/'));
