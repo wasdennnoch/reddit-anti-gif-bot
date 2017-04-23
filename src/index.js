@@ -241,6 +241,8 @@ async function uploadPost(post) {
         if (link)
             cache.setLink(gif, link, post.uploaded);
         deferredPosts.push(post); // let it being processed by the next loop
+        // TODO create a new array since this could be called in the middle of processing
+        // TODO some gfycat uploads get lbelled as 'link' instead 'mirror'
     } catch (e) {
         stats.onLoopError(e);
     }

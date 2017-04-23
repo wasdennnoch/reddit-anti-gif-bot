@@ -130,7 +130,7 @@ class Stats {
         this.uploadedGifCount++;
     }
 
-    onGif(gif) {
+    onGif(gif) { // TODO track which subs have most gifs (/r/gifs... heh)
         if (log) console.log(`Got gif: ${gif}`);
         this.totalGifSubmissions++;
     }
