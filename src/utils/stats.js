@@ -13,30 +13,26 @@ class Stats {
     }
 
     load() {
-        let json = JSON.parse(fs.readFileSync(this.path, {encoding: 'utf8'}) || '{}');
-        if (Object.getOwnPropertyNames(json).length === 0) { // Empty object
-            json = {
-                loops: 0,
-                loopErrors: {},
-                possibeBanErrors: {},
+        let json = {
+            loops: 0,
+            loopErrors: {},
+            possibeBanErrors: {},
 
-                cacheSize: 0,
-                cachePurges: 0,
+            cacheSize: 0,
+            cachePurges: 0,
 
-                totalSubmissions: 0,
-                totalGifSubmissions: 0,
-                uploadedGifCount: 0,
-                unknownDomainsCount: 0,
-                cachedGifsCount: 0,
-                deferCount: 0,
-                deferFails: 0,
+            totalSubmissions: 0,
+            totalGifSubmissions: 0,
+            uploadedGifCount: 0,
+            cachedGifsCount: 0,
+            deferCount: 0,
+            deferFails: 0,
 
-                domains: {},
-                unknownDomains: {},
-                uploadedGifs: {},
-                failedDeferredGifs: {}
-            }
-        }
+            domains: {},
+            unknownDomains: {},
+            subreddits: {}
+        };
+        Object.assign(json, JSON.parse(fs.readFileSync(this.path, {encoding: 'utf8'}) || '{}'));
         this.loops = json.loops;
         this.loopErrors = json.loopErrors;
         this.possibeBanErrors = json.possibeBanErrors;
@@ -47,15 +43,13 @@ class Stats {
         this.totalSubmissions = json.totalSubmissions;
         this.totalGifSubmissions = json.totalGifSubmissions;
         this.uploadedGifCount = json.uploadedGifCount;
-        this.unknownDomainsCount = json.unknownDomainsCount;
         this.cachedGifsCount = json.cachedGifsCount;
         this.deferCount = json.deferCount;
         this.deferFails = json.deferFails;
 
         this.domains = json.domains;
         this.unknownDomains = json.unknownDomains;
-        this.uploadedGifs = json.uploadedGifs;
-        this.failedDeferredGifs = json.failedDeferredGifs;
+        this.subreddits = json.subreddits;
     }
 
     save() {
@@ -71,15 +65,13 @@ class Stats {
             totalSubmissions: this.totalSubmissions,
             totalGifSubmissions: this.totalGifSubmissions,
             uploadedGifCount: this.uploadedGifCount,
-            unknownDomainsCount: this.unknownDomainsCount,
             cachedGifsCount: this.cachedGifsCount,
             deferCount: this.deferCount,
             deferFails: this.deferFails,
 
             domains: this.domains,
             unknownDomains: this.unknownDomains,
-            uploadedGifs: this.uploadedGifs,
-            failedDeferredGifs: this.failedDeferredGifs
+            subreddits: this.subreddits,
         };
         fs.writeFile(this.path, JSON.stringify(json, null, 2), (e) => {
             if (e) console.log(`[!]-- Error saving stats: ${e.toString()}`);
@@ -124,13 +116,10 @@ class Stats {
 
     onUpload(gif, link) {
         if (log) console.log(`Uploaded: ${gif} --> ${link}`);
-        if (!this.uploadedGifs[gif])
-            this.uploadedGifs[gif] = 0;
-        this.uploadedGifs[gif]++;
         this.uploadedGifCount++;
     }
 
-    onGif(gif) { // TODO track which subs have most gifs (/r/gifs... heh)
+    onGif(gif) {
         if (log) console.log(`Got gif: ${gif}`);
         this.totalGifSubmissions++;
     }
@@ -142,10 +131,8 @@ class Stats {
     }
 
     onUnknownDomain(domain) {
-        if (!this.unknownDomains[domain]) {
+        if (!this.unknownDomains[domain])
             this.unknownDomains[domain] = 0;
-            this.unknownDomainsCount++;
-        }
         this.unknownDomains[domain]++;
     }
 
@@ -161,10 +148,13 @@ class Stats {
 
     onDeferFail(gif) {
         if (log) console.log(`Failed loading of deferred gif ${gif}`);
-        if (!this.failedDeferredGifs[gif])
-            this.failedDeferredGifs[gif] = 0;
-        this.failedDeferredGifs[gif]++;
         this.deferFails++;
+    }
+
+    onSubreddit(sub) {
+        if (!this.subreddits[sub])
+            this.subreddits[sub] = 0;
+        this.subreddits[sub]++;
     }
 
 }

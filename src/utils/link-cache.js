@@ -13,12 +13,10 @@ class LinkCache {
     }
 
     load() {
-        let json = JSON.parse(fs.readFileSync(this.path, {encoding: 'utf8'}) || '{}');
-        if (Object.getOwnPropertyNames(json).length === 0) { // Empty object
-            json = {
-                imageCache: []
-            }
-        }
+        let json = {
+            imageCache: []
+        };
+        Object.assign(json, JSON.parse(fs.readFileSync(this.path, {encoding: 'utf8'}) || '{}'));
         this.imageCache = json.imageCache;
     }
 

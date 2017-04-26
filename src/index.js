@@ -91,6 +91,7 @@ async function update() {
                     (includesPartial(nonDotGifDomains, post.domain) && !post.url.endsWith('.mp4')) || post.url.endsWith('.gif')) {
                     sorted.push(post);
                     stats.onGif(post.url);
+                    stats.onSubreddit(post.subreddit.display_name);
                     if (!includesPartial(knownDomains, post.domain) && post.url.endsWith('.gif')) {
                         stats.onUnknownDomain(post.domain);
                     } else {
