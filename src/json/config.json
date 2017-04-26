@@ -21,8 +21,7 @@
   "ignoreDomains": [
     "imgur.com",
     "memecenter.com",
-    "memecdn.com",
-	"68.media.tumblr.com"
+    "memecdn.com"
   ],
   "ignoreSubreddits": [
     "menkissing",
@@ -54,7 +53,20 @@
     "WTF",
     "HorrorFilmPosters",
     "homestuck",
-    "gifs"
+    "gifs",
+	"gamedevscreens",
+	"magicthecirclejerking",
+	"Garfield",
+	"MarchAgainstTrump",
+	"criticalrole",
+	"Portland",
+	"Blackfellas",
+	"whatisthisthing",
+	"yugioh",
+	"ImagesOfAfghanistan",
+	"The_Donald",
+    "duelyst",
+    "PrequelMemes"
   ],
   "ignoreSubredditsPartial": [
     "nsfw",
