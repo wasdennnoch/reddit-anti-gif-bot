@@ -1,6 +1,6 @@
 {
   "name": "reddit-anti-gif-bot",
-  "version": "1.0.0",
+  "version": "1.1.0",
   "description": "A Reddit bot which provides mp4 links to gif submissions",
   "main": "src/index.js",
   "scripts": {
@@ -11,6 +11,8 @@
   "dependencies": {
     "deasync": "^0.1.9",
     "gfycat-sdk": "^1.2.0",
+    "request": "^2.81.0",
+    "request-promise-native": "^1.0.3",
     "snoowrap": "^1.13.0"
   }
 }

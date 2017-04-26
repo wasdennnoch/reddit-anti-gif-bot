@@ -2,44 +2,30 @@
 
 const fs = require('fs');
 const path = require('path');
-const pkgReader = require('./utils/package-reader');
 const snoowrap = require('snoowrap');
 const Gfycat = require('gfycat-sdk');
 const deasync = require('deasync');
-const Stats = require('./utils/stats');
-const LinkCache = require('./utils/link-cache');
+const vars = require('./utils/vars');
 
-const cachePath = path.join(__dirname, 'json', 'linkCache.json');
-const statsPath = path.join(__dirname, 'json', 'stats.json');
-const configPath = path.join(__dirname, 'json', 'config.json');
-const secretPath = path.join(__dirname, '..', '.secret');
-const keys = JSON.parse(fs.readFileSync(path.join(secretPath, 'keys.json'), 'utf8'));
-const config = JSON.parse(fs.readFileSync(configPath, 'utf8'));
+const prod = vars.prod;
 
-const updateInterval = config.updateInterval;
-const saveInterval = config.saveInterval;
-const knownDomains = config.knownDomains;
-const nonDotGifDomains = config.nonDotGifDomains;
-const ignoreDomains = config.ignoreDomains;
-const ignoreSubreddits = config.ignoreSubreddits;
-const ignoreSubredditsPartial = config.ignoreSubredditsPartial;
-const replyTemplate = config.replyTemplate;
-const prod = process.env.PROD || false;
-const log = !prod;
-
-const stats = new Stats(statsPath, log);
-const cache = new LinkCache(cachePath, stats, config.cacheSize, config.cachePurgeSize);
-const userAgent = `bot:anti-gif-bot:${pkgReader.getVersion()}`;
+const stats = vars.stats;
+const cache = vars.cache;
+const userAgent = vars.userAgent;
 const reddit = new snoowrap({
     userAgent: userAgent,
-    clientId: keys.reddit.clientId,
-    clientSecret: keys.reddit.clientSecret,
-    username: keys.reddit.username,
-    password: keys.reddit.password
+    clientId: vars.reddit.clientId,
+    clientSecret: vars.reddit.clientSecret,
+    username: vars.reddit.username,
+    password: vars.reddit.password
+});
+reddit.config({
+    retryErrorCodes: [], // Disable automatic retry to not spam reddit and we loop anyways
+    warnings: !prod
 });
 const gfycat = new Gfycat({
-    clientId: keys.gfycat.clientId,
-    clientSecret: keys.gfycat.clientSecret
+    clientId: vars.gfycat.clientId,
+    clientSecret: vars.gfycat.clientSecret
 });
 
 let loopInterval;
@@ -52,7 +38,7 @@ console.log('[anti-gif-bot] Ready.');
 module.exports.start = () => {
     if (!loopInterval) {
         console.log('[anti-gif-bot] Started.');
-        loopInterval = setInterval(update, updateInterval);
+        loopInterval = setInterval(update, vars.updateInterval);
         update();
     }
 };
@@ -64,6 +50,7 @@ module.exports.stop = () => {
     }
 };
 module.exports.start(); // I'll change the structure a bit in the future so I already extracted the start function
+
 
 async function update() {
 
@@ -85,14 +72,14 @@ async function update() {
         }
         const sorted = [];
         submissions.forEach(post => {
-            if (!post.domain.startsWith('self.') && !post.over_18 && !includesPartial(ignoreDomains, post.domain)
-                && !ignoreSubreddits.includes(post.subreddit.display_name) && !includesPartial(ignoreSubredditsPartial, post.subreddit.display_name)) {
-                if ((includesPartial(knownDomains, post.domain) && post.url.endsWith('.gif')) ||
-                    (includesPartial(nonDotGifDomains, post.domain) && !post.url.endsWith('.mp4')) || post.url.endsWith('.gif')) {
+            if (!post.domain.startsWith('self.') && !post.over_18 && !includesPartial(vars.ignoreDomains, post.domain)
+                && !vars.ignoreSubreddits.includes(post.subreddit.display_name) && !includesPartial(vars.ignoreSubredditsPartial, post.subreddit.display_name)) {
+                if ((includesPartial(vars.knownDomains, post.domain) && post.url.endsWith('.gif')) ||
+                    (includesPartial(vars.nonDotGifDomains, post.domain) && !post.url.endsWith('.mp4')) || post.url.endsWith('.gif')) {
                     sorted.push(post);
                     stats.onGif(post.url);
                     stats.onSubreddit(post.subreddit.display_name);
-                    if (!includesPartial(knownDomains, post.domain) && post.url.endsWith('.gif')) {
+                    if (!includesPartial(vars.knownDomains, post.domain) && post.url.endsWith('.gif')) {
                         stats.onUnknownDomain(post.domain);
                     } else {
                         stats.onDomain(post.domain);
@@ -104,130 +91,149 @@ async function update() {
         stats.onGifCount(posts.length);
         posts = posts.concat(deferredPosts);
 
+        await Promise.all(await createParsePromises(posts));
 
-        const newDeferredPosts = [];
-        for (let i = 0; i < posts.length; i++) {
-            const post = posts[i];
-            const gif = post.url.endsWith('/') ? post.url.substring(0, post.url.length - 1) : post.url;
-            const domain = post.domain;
-            if (post.deferCount === undefined) { // only set the values if they've never been set (deferring)
-                post.deferCount = 0;
-                post.uploaded = false;
-            }
-            let link = post.mp4link;
-
-            if (link) { // Uploaded and passed to this loop
-                continue;
-            }
-            if (!link) {
-                link = cache.getLink(gif);
-            }
-            if (link && link !== 'https://i.giphy.com.mp4') { // Already cached (additional check because of previous parsing bug)
-                post.mp4link = link;
-                stats.onCachedGif(gif, link);
-                continue;
-            }
-
-            if (domain.includes('i.gyazo.com') || domain.includes('media.tumblr.com') || domain.includes('i.makeagif.com') ||
-                domain.includes('j.gifs.com') || domain.includes('gifgif.io')) {
-
-                link = replaceGifWithMp4(gif);
-
-            } else if (domain.includes('gfycat.com')) {
-
-                link = gif.replace(/(thumbs\.)|(giant\.)/, '').replace(/(-size_restricted)?(\.gif)$/, '');
-
-            } else if (domain.includes('giphy.com')) {
-
-                if (domain.startsWith('media')) {
-                    link = gif.substring(0, gif.lastIndexOf('/')).replace(/[a-z0-9]+(\.giphy.com\/media)/, 'i.giphy.com') + '.mp4';
-                } else if (domain.startsWith('i.')) {
-                    link = replaceGifWithMp4(gif);
-                } else { // actual website giphy.com
-                    link = gif.replace('giphy.com/gifs', 'i.giphy.com');
-                    if (link.lastIndexOf('/') > link.length - 12) {
-                        // IDs are 13 in length, if the last / is further back than that there's something else appended
-                        // (such as '/html5', '/tile', '/fullscreen')
-                        link = link.substring(0, link.lastIndexOf('/'));
-                    }
-                    const dashIndex = link.lastIndexOf('-');
-                    if (dashIndex > 0) {
-                        const slashIndex = link.lastIndexOf('/');
-                        link = link.substring(0, slashIndex + 1) + link.substring(dashIndex + 1);
-                    }
-                    link += '.mp4';
-                }
-
-            } else if (domain.includes('i.redd.it')) {
-
-                try {
-                    link = await post.refresh().preview.images[0].variants.mp4.source.url; // JSON hell
-                } catch (e) {
-                    if (post.deferCount < 3) {
-                        // defer loading posts from i.redd.it to avoid an issue where the 'preview' item isn't yet loaded in the post (probably takes time to process)
-                        post.deferCount++;
-                        newDeferredPosts.push(post);
-                        stats.onDefer(gif);
-                    } else {
-                        // Image could've been deleted or malformed URL or something else. Just ignore it now.
-                        stats.onDeferFail(gif);
-                    }
-                }
-
-            } else {
-
-                // upload to gfycat async to not interfere with the next interval (deferring gets screded up)
-                if (!post.uploaded) {
-                    uploadPost(post);
-                }
-
-            }
-
-            post.mp4link = link;
-            if (link)
-                cache.setLink(gif, link, post.uploaded);
-        }
-        deferredPosts = newDeferredPosts;
-
-
+        deferredPosts = [];
         for (let i = 0; i < posts.length; i++) {
             const post = posts[i];
             const link = post.mp4link;
-            if (!link)
-                continue;
+            if (!link && post.deferred) {
 
-            //noinspection JSUnusedLocalSymbols
-            const reply = replyTemplate.replace('%%MP4LINK%%', link).replace('%%TYPE%%', post.uploaded ? 'mirror' : 'link');
+                deferredPosts.push(post);
 
-            try {
-                if (prod) {
-                    await post.reply(reply);
-                } else {
-                    console.log(`Finished link: ${link}`);
+            } else if (link) {
+                try {
+                    if (prod) {
+                        const reply = vars.replyTemplate.replace('%%MP4LINK%%', link).replace('%%TYPE%%', post.uploaded ? 'mirror' : 'link');
+                        await post.reply(reply);
+                    } else {
+                        console.log(`Finished link: ${link} --- uploaded: ${post.uploaded}`);
+                    }
+                } catch (e) {
+                    if (e.toString().includes('403'))
+                        stats.onPossibleBanError(e, post.subreddit.display_name);
+                    else
+                        throw e;
                 }
-            } catch (e) {
-                if (e.toString().includes('403') || e.toString().includes('Forbidden'))
-                    stats.onPossibleBanError(e, post.subreddit.display_name);
-                else
-                    throw e;
             }
         }
-
 
     } catch (e) {
         stats.onLoopError(e);
     }
 
-    if (!prod || loops % saveInterval === 0) {
+    if (!prod || loops % vars.saveInterval === 0) {
         stats.save();
         cache.save();
     }
 
 }
 
+
+async function createParsePromises(posts) {
+    const promises = [];
+    for (let i = 0; i < posts.length; i++) {
+        promises.push(Promise.resolve(posts[i]).then(await parsePost));
+    }
+    return promises;
+}
+
+async function parsePost(post) {
+
+    try {
+
+        const gif = post.url.endsWith('/') ? post.url.substring(0, post.url.length - 1) : post.url;
+        const domain = post.domain;
+        if (post.deferCount === undefined) { // only set the values if they've never been set (deferring)
+            post.deferCount = 0;
+            post.uploaded = false;
+        }
+        let link = post.mp4link;
+
+        if (post.uploading || link) { // Currently uploading or already uploaded and passed to this loop
+            return;
+        }
+        if (!link) {
+            link = cache.getLink(gif);
+        }
+        if (link && link !== 'https://i.giphy.com.mp4') { // Already cached (additional check because of previous parsing bug)
+            post.mp4link = link;
+            stats.onCachedGif(gif, link);
+            return;
+        }
+
+        if (domain.includes('i.gyazo.com') || domain.includes('media.tumblr.com') || domain.includes('i.makeagif.com') ||
+            domain.includes('j.gifs.com') || domain.includes('gifgif.io')) { // TODO extract this to the config
+
+            link = replaceGifWithMp4(gif);
+
+        } else if (domain.includes('gfycat.com')) {
+
+            link = gif.replace(/(thumbs\.)|(giant\.)/, '').replace(/(-size_restricted)?(\.gif)$/, '');
+
+        } else if (domain.includes('giphy.com')) {
+
+            if (domain.startsWith('media')) {
+                link = gif.substring(0, gif.lastIndexOf('/')).replace(/[a-z0-9]+(\.giphy.com\/media)/, 'i.giphy.com') + '.mp4';
+            } else if (domain.startsWith('i.')) {
+                link = replaceGifWithMp4(gif);
+            } else { // actual website giphy.com
+                link = gif.replace('giphy.com/gifs', 'i.giphy.com');
+                if (link.lastIndexOf('/') > link.length - 12) {
+                    // IDs are 13 in length, if the last / is further back than that there's something else appended
+                    // (such as '/html5', '/tile', '/fullscreen')
+                    link = link.substring(0, link.lastIndexOf('/'));
+                }
+                const dashIndex = link.lastIndexOf('-');
+                if (dashIndex > 0) {
+                    const slashIndex = link.lastIndexOf('/');
+                    link = link.substring(0, slashIndex + 1) + link.substring(dashIndex + 1);
+                }
+                link += '.mp4';
+            }
+
+        } else if (domain.includes('i.redd.it')) {
+
+            try {
+                link = post.preview.images[0].variants.mp4.source.url; // JSON hell
+            } catch (e) {
+                if (post.deferCount < 3) {
+                    // defer loading posts from i.redd.it to avoid an issue where the 'preview' item isn't yet loaded in the post (probably takes time to process)
+                    post.deferCount++;
+                    post.deferred = true;
+                    stats.onDefer(gif);
+                } else {
+                    // Image could've been deleted or malformed URL or something else. Just ignore it now.
+                    post.deferred = false;
+                    stats.onDeferFail(gif);
+                }
+            }
+
+        } else {
+
+            // upload to gfycat async and defer
+            post.deferred = true;
+            if (!post.uploading) {
+                post.uploading = true;
+                uploadPost(post);
+            }
+
+        }
+
+        post.mp4link = link;
+        if (link) {
+            cache.setLink(gif, link, post.uploaded);
+        }
+
+    } catch (e) {
+        stats.onLoopError(e);
+    }
+
+}
+
+
 async function uploadPost(post) {
     try {
-        post.uploaded = true;
         const gif = post.url.endsWith('/') ? post.url.substring(0, post.url.length - 1) : post.url;
         let link = null;
         const postShortLink = `https://reddit.com/${post.id}`;
@@ -252,10 +258,9 @@ async function uploadPost(post) {
         stats.onUpload(gif, link);
         post.mp4link = link;
         if (link)
-            cache.setLink(gif, link, post.uploaded);
-        deferredPosts.push(post); // let it being processed by the next loop
-        // TODO create a new array since this could be called in the middle of processing
-        // TODO some gfycat uploads get lbelled as 'link' instead 'mirror'
+            cache.setLink(gif, link, true);
+        post.uploading = false;
+        post.uploaded = true;
     } catch (e) {
         stats.onLoopError(e);
     }

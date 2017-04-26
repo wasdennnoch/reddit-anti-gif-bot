@@ -1,6 +1,6 @@
 {
   "updateInterval": 15000,
-  "saveInterval": 8,
+  "saveInterval": 4,
   "cacheSize": 20000,
   "cachePurgeSize": 5000,
   "replyTemplate": "[mp4 %%TYPE%%](%%MP4LINK%%)\r\n\r\n^(mp4s have a drastically smaller file size than gifs)\r\n\r\n---\r\n>*Beep, I'm a bot.* [source/info/feedback](https://github.com/wasdennnoch/reddit-anti-gif-bot) | [author](/u/MrWasdennnoch)",
