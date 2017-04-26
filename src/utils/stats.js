@@ -25,6 +25,7 @@ class Stats {
             totalGifSubmissions: 0,
             uploadedGifCount: 0,
             cachedGifsCount: 0,
+            maxGifsSimultaneously: 0,
             deferCount: 0,
             deferFails: 0,
 
@@ -44,6 +45,7 @@ class Stats {
         this.totalGifSubmissions = json.totalGifSubmissions;
         this.uploadedGifCount = json.uploadedGifCount;
         this.cachedGifsCount = json.cachedGifsCount;
+        this.maxGifsSimultaneously = json.maxGifsSimultaneously;
         this.deferCount = json.deferCount;
         this.deferFails = json.deferFails;
 
@@ -66,6 +68,7 @@ class Stats {
             totalGifSubmissions: this.totalGifSubmissions,
             uploadedGifCount: this.uploadedGifCount,
             cachedGifsCount: this.cachedGifsCount,
+            maxGifsSimultaneously: this.maxGifsSimultaneously,
             deferCount: this.deferCount,
             deferFails: this.deferFails,
 
@@ -134,6 +137,11 @@ class Stats {
         if (!this.unknownDomains[domain])
             this.unknownDomains[domain] = 0;
         this.unknownDomains[domain]++;
+    }
+
+    onGifCount(count) {
+        if (this.maxGifsSimultaneously < count)
+            this.maxGifsSimultaneously = count;
     }
 
     onCachedGif(gif, link) {

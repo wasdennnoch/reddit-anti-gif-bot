@@ -101,6 +101,7 @@ async function update() {
             }
         });
         let posts = sorted;
+        stats.onGifCount(posts.length);
         posts = posts.concat(deferredPosts);
 
 
