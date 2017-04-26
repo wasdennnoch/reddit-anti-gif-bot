@@ -3,10 +3,6 @@
 The source of [u/anti-gif-bot](https://reddit.com/u/anti-gif-bot), a bot which provides an mp4
 link/mirror for gif submissions.
 
-*Since the bot is very new it may be ratelimited by Reddit in the first few days. Just upvote
-it so it gets enough karma to lift the limit. This is a spam prevention method from Reddit,
-I'm not begging for fake internet points.*
-
 ## Why?
 
 As we all know gifs are a very old technique to save animated images of cute cats and
@@ -25,6 +21,16 @@ if the submission directly links a gif the bot comments with a link to an mp4 ve
 popular hosters already host mp4s themselves but if they don't provide alternative versions
 this bot uploads the gif to gfycat which then converts it to an mp4.
 
+This not only helps mobile users but in general users on monitored networks or even people
+like me who don't have fast enough internet to download the full 160MB during the
+15 seconds of playing. Don't only think of yourself please, there are people out there
+who don't have a gigabit connection.
+
+### No webm?
+
+No, no webm. I don't download and convert the gifs but instead link to the mp4 versions already
+offered by the same hoster. The only website that hosts webms is gfycat but I don't want to
+upload every singe gif there or download, convert and upload them myself.
 
 ## How?
 
@@ -39,10 +45,10 @@ link gets posted. That's it basically. There are a few more things such as a dom
 (the gifv-bot already covers gifs from imgur) and an internal stats counter that keeps track
 of the amount of submissions the bot scraped, the amount of gifs, domains that host gifs etc.
 Maybe I'll eventually create a website where I make these stats available. Until then I'll
-keep them private (well, I accidentally commited a dev version but whatever, it's no secret)
+keep them private (well, I accidentally commited a dev version once but whatever, it's no secret)
 to enhance the bot and for my own curiosity.
 
 ## And I?
 
-If you find any bugs or want to submit an enhancement feel free to submit a pull request and
-I'll update the bot quickly!
+If you find any bugs or want to submit an enhancement feel free to open an issue or
+submit a pull request and I'll look into it!
