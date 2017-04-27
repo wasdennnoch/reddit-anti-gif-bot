@@ -24,6 +24,7 @@ const cache = new LinkCache(cachePath, stats, config.cacheSize, config.cachePurg
 module.exports.reddit = keys.reddit;
 module.exports.gfycat = keys.gfycat;
 module.exports.updateInterval = config.updateInterval;
+module.exports.gifSizeThreshold = config.gifSizeThreshold;
 module.exports.ignoreDomains = config.ignoreDomains;
 module.exports.ignoreSubreddits = config.ignoreSubreddits;
 module.exports.ignoreSubredditsPartial = config.ignoreSubredditsPartial;

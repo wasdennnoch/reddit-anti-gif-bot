@@ -4,6 +4,7 @@ const fs = require('fs');
 const path = require('path');
 const snoowrap = require('snoowrap');
 const Gfycat = require('gfycat-sdk');
+const request = require('request-promise-native');
 const deasync = require('deasync');
 const vars = require('./utils/vars');
 
@@ -161,6 +162,9 @@ async function parsePost(post) {
             stats.onCachedGif(gif, link);
             return;
         }
+        if (!await shouldCreateLink(gif)) {
+            return;
+        }
 
         if (domain.includes('i.gyazo.com') || domain.includes('media.tumblr.com') || domain.includes('i.makeagif.com') ||
             domain.includes('j.gifs.com') || domain.includes('gifgif.io')) {
@@ -231,7 +235,6 @@ async function parsePost(post) {
 
 }
 
-
 async function uploadPost(post) {
     if (!prod) {
         post.mp4link = "fake";
@@ -270,6 +273,19 @@ async function uploadPost(post) {
     } catch (e) {
         stats.onLoopError(e);
     }
+}
+
+async function shouldCreateLink(url) {
+    const res = await request({
+        method: 'HEAD',
+        uri: url,
+        resolveWithFullResponse: true
+    });
+    if (!prod) {
+        console.log(`Type: ${res.headers['content-type']}`);
+        console.log(`Length: ${res.headers['content-length']}`);
+    }
+    return res.headers['content-type'] === 'image/gif' && res.headers['content-length'] > vars.gifSizeThreshold;
 }
 
 function replaceGifWithMp4(url) {
