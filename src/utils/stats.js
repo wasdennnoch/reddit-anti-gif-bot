@@ -8,12 +8,14 @@ class Stats {
 
     constructor(statsPath, logging) {
         this.path = statsPath;
+        this.lastSaveTime = Date.now();
         log = logging;
         this.load();
     }
 
     load() {
         let json = {
+            runtime: 0,
             loops: 0,
             loopErrors: {},
             possibeBanErrors: {},
@@ -34,6 +36,7 @@ class Stats {
             subreddits: {}
         };
         Object.assign(json, JSON.parse(fs.readFileSync(this.path, {encoding: 'utf8'}) || '{}'));
+        this.runtime = json.runtime;
         this.loops = json.loops;
         this.loopErrors = json.loopErrors;
         this.possibeBanErrors = json.possibeBanErrors;
@@ -56,7 +59,10 @@ class Stats {
 
     save() {
         if (log) console.log('SAVE----------------------------');
+        this.runtime += (Date.now() - this.lastSaveTime);
+        this.lastSaveTime = Date.now();
         const json = {
+            runtime: this.runtime,
             loops: this.loops,
             loopErrors: this.loopErrors,
             possibeBanErrors: this.possibeBanErrors,
@@ -87,18 +93,21 @@ class Stats {
     }
 
     onLoopError(e) {
-        console.log(`Loop error: ${e.toString()}`);
-        if (!e.toString().includes("Cannot read property 'images' of undefined") && !e.toString().includes("No items returned") && !e.toString().includes("ratelimit"))
+        const str = e.toString();
+        console.log(`Loop error: ${str}`);
+        if (!str.includes("Cannot read property 'images' of undefined") && !str.includes("No items returned")
+            && !str.includes("ratelimit"))
             console.log(e);
-        if (!this.loopErrors[e.toString()])
-            this.loopErrors[e.toString()] = 0;
-        this.loopErrors[e.toString()]++;
+        if (!this.loopErrors[str])
+            this.loopErrors[str] = 0;
+        this.loopErrors[str]++;
     }
 
     onPossibleBanError(e, sub) {
-        console.log(`Possible ban error in subreddit '${sub}': ${e.toString()}`);
+        const str = e.toString();
+        console.log(`Possible ban error in '${sub}': ${str}`);
         console.log(e);
-        const saveString = `[${sub}]: ${e.toString()}`;
+        const saveString = `[${sub}]: ${str}`;
         if (!this.possibeBanErrors[saveString])
             this.possibeBanErrors[saveString] = 0;
         this.possibeBanErrors[saveString]++;

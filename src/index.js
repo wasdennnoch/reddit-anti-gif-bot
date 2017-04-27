@@ -163,7 +163,7 @@ async function parsePost(post) {
         }
 
         if (domain.includes('i.gyazo.com') || domain.includes('media.tumblr.com') || domain.includes('i.makeagif.com') ||
-            domain.includes('j.gifs.com') || domain.includes('gifgif.io')) { // TODO extract this to the config
+            domain.includes('j.gifs.com') || domain.includes('gifgif.io')) {
 
             link = replaceGifWithMp4(gif);
 
