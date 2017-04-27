@@ -233,6 +233,12 @@ async function parsePost(post) {
 
 
 async function uploadPost(post) {
+    if (!prod) {
+        post.mp4link = "fake";
+        post.uploading = false;
+        post.uploaded = true;
+        return;
+    }
     try {
         const gif = post.url.endsWith('/') ? post.url.substring(0, post.url.length - 1) : post.url;
         let link = null;
