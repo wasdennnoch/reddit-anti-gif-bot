@@ -3,7 +3,7 @@
   "saveInterval": 4,
   "cacheSize": 20000,
   "cachePurgeSize": 5000,
-  "gifSizeThreshold": 500000,
+  "gifSizeThreshold": 750000,
   "replyTemplate": "[mp4 %%TYPE%%](%%MP4LINK%%)\r\n\r\n^(mp4s have a drastically smaller file size than gifs)\r\n\r\n---\r\n>*Beep, I'm a bot.* [source/info/feedback](https://github.com/wasdennnoch/reddit-anti-gif-bot) | [author](/u/MrWasdennnoch)",
   "knownDomains": [
     "giphy.com",
@@ -57,7 +57,7 @@
     "gifs",
 	"gamedevscreens",
 	"magicthecirclejerking",
-	"Garfield",
+	"garfield",
 	"MarchAgainstTrump",
 	"criticalrole",
 	"Portland",
@@ -67,7 +67,11 @@
 	"ImagesOfAfghanistan",
 	"The_Donald",
     "duelyst",
-    "PrequelMemes"
+    "PrequelMemes",
+    "AnimatedMovieStills",
+    "TrollXWeddings",
+    "ClubPenguinRewritten",
+    "Weakpots"
   ],
   "ignoreSubredditsPartial": [
     "nsfw",
