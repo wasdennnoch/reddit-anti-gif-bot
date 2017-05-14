@@ -4,6 +4,7 @@ const fs = require('fs');
 
 let log;
 
+// TODO maybe track amount of submissions over day/week?
 class Stats {
 
     constructor(statsPath, logging) {
@@ -95,8 +96,8 @@ class Stats {
     onLoopError(e) {
         const str = e.toString();
         console.log(`Loop error: ${str}`);
-        if (!str.includes("Cannot read property 'images' of undefined") && !str.includes("No items returned")
-            && !str.includes("ratelimit"))
+        if (!str.includes("Cannot read property 'images' of undefined") && !str.includes('No items returned')
+            && !str.includes('ENOTFOUND') && !str.includes('ratelimit'))
             console.log(e);
         if (!this.loopErrors[str])
             this.loopErrors[str] = 0;
