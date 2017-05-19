@@ -34,19 +34,19 @@ class LinkCache {
         });
     }
 
-    getLink(gif) {
+    getCacheItem(gif) {
         for (let i = 0; i < this.imageCache.length; i++) {
             const item = this.imageCache[i];
             if (item.gif === gif) {
                 item.count++;
                 item.times.push(Date.now());
-                return item.mp4;
+                return item;
             }
         }
         return null;
     }
 
-    setLink(gif, mp4, uploaded) {
+    setCacheItem(gif, mp4, uploaded) {
         this.imageCache[gif] = mp4;
         this.imageCache.push({
             gif: gif,

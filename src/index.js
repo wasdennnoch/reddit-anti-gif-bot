@@ -182,14 +182,17 @@ async function parsePost(post) {
         }
         let link = post.mp4link;
         let skipToEnd = false;
+        let cacheItem;
 
         if (post.uploading || link) { // Currently uploading or already uploaded and passed to this loop
             skipToEnd = true;
         } else if (!post.uploaded && !link) {
-            link = cache.getLink(gif);
+            cacheItem = cache.getCacheItem(gif);
+            link = cacheItem ? cacheItem.mp4 : null;
         }
         if (!post.uploaded && link && link !== 'https://i.giphy.com.mp4') { // Already cached (additional check because of previous parsing bug)
             post.mp4link = link;
+            post.uploaded = cacheItem.uploaded;
             // TODO save and fetch sizes from cache
             // [rem] skipToEnd = true;
             stats.onCachedGif(gif, link);
@@ -275,7 +278,7 @@ async function parsePost(post) {
          that is ${post.result.mp4Save} times smaller (webm: ${post.result.webmSave})`);
 
         post.mp4link = link;
-        cache.setLink(gif, link, post.uploaded);
+        cache.setCacheItem(gif, link, post.uploaded);
 
     } catch (e) {
         stats.onLoopError(e);
@@ -387,7 +390,7 @@ async function uploadPost(post) {
         stats.onUpload(gif, link);
         post.mp4link = link;
         if (link)
-            cache.setLink(gif, link, true);
+            cache.setCacheItem(gif, link, true);
         post.uploading = false;
         post.uploaded = true;
     } catch (e) {
@@ -453,9 +456,5 @@ function includesPartial(array, term) {
 }
 
 function delay(delay) {
-    return new Promise(resolve => {
-        setTimeout(() => {
-            resolve();
-        }, delay);
-    });
+    return new Promise(r => setTimeout(r, delay));
 }
