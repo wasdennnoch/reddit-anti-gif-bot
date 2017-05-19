@@ -97,7 +97,7 @@ class Stats {
         const str = e.toString();
         console.log(`Loop error: ${str}`);
         if (!str.includes("Cannot read property 'images' of undefined") && !str.includes('No items returned')
-            && !str.includes('ENOTFOUND') && !str.includes('ratelimit'))
+            && !str.includes('ENOTFOUND') && !str.includes('ratelimit') && !str.includes('StatusCodeError'))
             console.log(e);
         if (!this.loopErrors[str])
             this.loopErrors[str] = 0;
