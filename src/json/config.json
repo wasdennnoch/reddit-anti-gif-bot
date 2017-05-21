@@ -4,7 +4,7 @@
   "cacheSize": 20000,
   "cachePurgeSize": 5000,
   "gifSizeThreshold": 750000,
-  "replyTemplate": "[mp4 %%TYPE%%](%%MP4LINK%%)\r\n\r\n^(mp4s have a drastically smaller file size than gifs)\r\n\r\n---\r\n>*Beep, I'm a bot.* [POLL: rename bot?](https://np.reddit.com/r/anti_gif_bot/comments/6by4hg/poll_should_i_rename_the_bot/) | [source/info/feedback](https://github.com/wasdennnoch/reddit-anti-gif-bot) | [author](https://www.reddit.com/message/compose?to=MrWasdennnoch)",
+  "replyTemplate": "[mp4 %%TYPE%%](%%MP4LINK%%)\r\n\r\n^(mp4s have a drastically smaller file size than gifs)\r\n\r\n---\r\n>*Beep, I'm a bot.* [POLL: rename bot?](https://np.reddit.com/r/anti_gif_bot/comments/6by4hg/poll_should_i_rename_the_bot/) | [source/info/feedback](https://github.com/wasdennnoch/reddit-anti-gif-bot) | [author](https://np.reddit.com/message/compose?to=MrWasdennnoch)",
   "knownDomains": [
     "giphy.com",
     "i.gyazo.com",
