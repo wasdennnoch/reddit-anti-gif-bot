@@ -131,7 +131,12 @@ async function update() {
                             deferred: false,
                             uploading: false,
                             uploaded: false,
-                            result: {}
+                            gfycatLink: false,
+                            gifSize: -1,
+                            mp4Size: -1,
+                            webmSize: -1,
+                            mp4Save: null,
+                            webmSave: null
                         });
                     } else {
                         if (!PROD) console.log(`Ignoring gif; ignored domain: ${ignoredDomain} (${domain}); ignored sureddit: ${ignoredSubreddit} (${subreddit})`);
@@ -273,16 +278,16 @@ async function parsePost(post) {
         }
 
         const gfycatLink = /^https?:\/\/gfycat.com/.test(link);
-        post.result.gfycatLink = gfycatLink;
+        post.gfycatLink = gfycatLink;
         if (gfycatLink) {
             await gfycat.authenticate();
             const res = await gfycat.getGifDetails({
                 gfyId: link.substring(link.lastIndexOf('/') + 1)
             });
-            post.result.mp4Size = res.gfyItem.mp4Size;
-            post.result.webmSize = res.gfyItem.webmSize;
-            if (post.result.gifSize) {
-                post.result.gifSize = res.gfyItem.gifSize;
+            post.mp4Size = res.gfyItem.mp4Size;
+            post.webmSize = res.gfyItem.webmSize;
+            if (post.gifSize) {
+                post.gifSize = res.gfyItem.gifSize;
             }
         } else {
             const mp4Check = await checkUrl(link, 'video/mp4', false);
@@ -293,12 +298,12 @@ async function parsePost(post) {
                 }
                 return;
             }
-            post.result.mp4Size = mp4Check.size;
+            post.mp4Size = mp4Check.size;
         }
-        post.result.mp4Save = Math.round((post.result.gifSize / post.result.mp4Size) * 100) / 100;
-        post.result.webmSave = Math.round((post.result.gifSize / post.result.webmSize) * 100) / 100;
-        if (!PROD) console.log(`Link stats: mp4 size: ${post.result.mp4Size} (webm: ${post.result.webmSize});
-         that is ${post.result.mp4Save} times smaller (webm: ${post.result.webmSave})`);
+        post.mp4Save = Math.round((post.gifSize / post.mp4Size) * 100) / 100;
+        post.webmSave = Math.round((post.gifSize / post.webmSize) * 100) / 100;
+        if (!PROD) console.log(`Link stats: mp4 size: ${post.mp4Size} (webm: ${post.webmSize});
+         that is ${post.mp4Save} times smaller (webm: ${post.webmSave})`);
 
         post.mp4 = link;
         cache.setCacheItem(gif, link, post.uploaded);

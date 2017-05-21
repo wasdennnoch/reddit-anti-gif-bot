@@ -4,7 +4,6 @@ const fs = require('fs');
 
 let log;
 
-// TODO maybe track amount of submissions over day/week?
 class Stats {
 
     constructor(statsPath, logging) {
