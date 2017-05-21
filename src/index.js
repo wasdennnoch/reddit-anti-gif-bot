@@ -92,18 +92,49 @@ async function update() {
         }
         const sorted = [];
         submissions.forEach(post => {
-            if (!post.domain.startsWith('self.') && !post.over_18 && !includesPartial(vars.ignoreDomains, post.domain)
-                && !vars.ignoreSubreddits.includes(post.subreddit.display_name) && !includesPartial(vars.ignoreSubredditsPartial, post.subreddit.display_name)) {
-                if ((includesPartial(vars.knownDomains, post.domain) && post.url.endsWith('.gif')) ||
-                    (includesPartial(vars.nonDotGifDomains, post.domain) && !post.url.endsWith('.mp4')) || post.url.endsWith('.gif')) {
-                    sorted.push(post);
-                    stats.onGif(post.url);
-                    // TODO always collect those stats and filter by blacklisted subs in dashboard
-                    stats.onSubreddit(post.subreddit.display_name);
-                    if (!includesPartial(vars.knownDomains, post.domain) && post.url.endsWith('.gif')) {
-                        stats.onUnknownDomain(post.domain);
+            const nsfw = post.over_18;
+            const subreddit = post.subreddit.display_name;
+            const url = post.url;
+            const domain = post.domain;
+            const isSelfPost = domain.startsWith('self.');
+            const isGif = url.endsWith('.gif');
+            const isMp4 = url.endsWith('.mp4');
+            const ignoredDomain = includesPartial(vars.ignoreDomains, domain);
+            const ignoredSubreddit = vars.ignoreSubreddits.includes(subreddit) ||
+                includesPartial(vars.ignoreSubredditsPartial, subreddit);
+            const isInKnownDomains = includesPartial(vars.knownDomains, domain);
+            const isInNonDotGifDomains = includesPartial(vars.nonDotGifDomains, domain);
+            const isKnownDomain = isInKnownDomains || isInNonDotGifDomains;
+
+            if (!isSelfPost && !nsfw && !isMp4) {
+                if ((isInKnownDomains && isGif) || isInNonDotGifDomains || isGif) {
+                    stats.onGif(url);
+                    stats.onSubreddit(subreddit);
+                    if (isKnownDomain) {
+                        stats.onDomain(domain);
                     } else {
-                        stats.onDomain(post.domain);
+                        stats.onUnknownDomain(domain);
+                    }
+                    if (!ignoredDomain && !ignoredSubreddit) {
+                        sorted.push({
+                            submission: post,
+                            nsfw: nsfw,
+                            subreddit: subreddit,
+                            author: post.author.name,
+                            url: url,
+                            domain: domain,
+                            gif: linkToGifLink(url.endsWith('/') ?
+                                url.substring(0, url.length - 1) :
+                                url, domain), // Already convert html link to direct gif links (giphy)
+                            mp4: null,
+                            deferCount: 0,
+                            deferred: false,
+                            uploading: false,
+                            uploaded: false,
+                            result: {}
+                        });
+                    } else {
+                        if (!PROD) console.log(`Ignoring gif; ignored domain: ${ignoredDomain} (${domain}); ignored sureddit: ${ignoredSubreddit} (${subreddit})`);
                     }
                 }
             }
@@ -112,7 +143,7 @@ async function update() {
         stats.onGifCount(posts.length);
         posts = posts.concat(deferredPosts);
 
-        // Do them all async in parallel
+        // Handle them all async in parallel
         await Promise.all(posts.map((post) => {
             return parsePost(post)
         }));
@@ -120,7 +151,7 @@ async function update() {
         deferredPosts = [];
         for (let i = 0; i < posts.length; i++) {
             const post = posts[i];
-            const link = post.mp4link;
+            const link = post.mp4;
             if (!link && post.deferred) {
 
                 deferredPosts.push(post);
@@ -129,13 +160,13 @@ async function update() {
                 try {
                     if (PROD) {
                         const reply = vars.replyTemplate.replace('%%MP4LINK%%', link).replace('%%TYPE%%', post.uploaded ? 'mirror' : 'link');
-                        await post.reply(reply);
+                        await post.submission.reply(reply);
                     } else {
                         console.log(`Finished link, uploaded: ${post.uploaded}, link: ${link}`);
                     }
                 } catch (e) {
                     if (e.toString().includes('403'))
-                        stats.onPossibleBanError(e, post.subreddit.display_name);
+                        stats.onPossibleBanError(e, post.subreddit);
                     else
                         throw e;
                 }
@@ -158,21 +189,13 @@ async function parsePost(post) {
     try {
 
         const domain = post.domain;
-        let gif = post.url.endsWith('/') ? post.url.substring(0, post.url.length - 1) : post.url;
-        gif = linkToGifLink(gif, domain); // Already convert html link to direct gif links (giphy)
-        if (post.deferCount === undefined) { // only set the values if they've never been set (deferral)
-            post.deferCount = 0;
-            post.uploading = false;
-            post.uploaded = false;
-            post.deferred = false;
-            post.result = {};
-        }
+        const gif = post.gif;
         if (!PROD) {
             console.log();
-            console.log(`Got post by: ${post.author.name}`);
-            console.log(`Link: ${post.url}`);
-            console.log(`Gif: ${gif}`);
-            console.log(`mp4: ${post.mp4Link}`);
+            console.log(`Got post by: ${post.author} in ${post.subreddit}`);
+            console.log(`Url: ${post.url}`);
+            console.log(`Gif: ${post.gif}`);
+            console.log(`mp4: ${post.mp4}`);
             console.log(`Deferred: ${post.deferred}`);
             console.log(`Defer count: ${post.deferCount}`);
             console.log(`Uploading: ${post.uploading}`);
@@ -180,7 +203,7 @@ async function parsePost(post) {
             console.log(`Result: ${Object.keys(post.result).length === 0 ? "Empty" : JSON.stringify(post.result)}`);
             console.log();
         }
-        let link = post.mp4link;
+        let link = post.mp4;
         let skipToEnd = false;
         let cacheItem;
 
@@ -198,7 +221,7 @@ async function parsePost(post) {
             stats.onCachedGif(gif, link);
             return;
         }
-        if (post.author.name === '[deleted]') {
+        if (post.author === '[deleted]') {
             post.deferred = false;
             if (!PROD) console.log('Ignoring post since it got deleted');
             return; // If post got deleted during deferral just ignore it
@@ -273,11 +296,11 @@ async function parsePost(post) {
             post.result.mp4Size = mp4Check.size;
         }
         post.result.mp4Save = Math.round((post.result.gifSize / post.result.mp4Size) * 100) / 100;
-        post.result.webmSave = Math.round((post.result.gifSize / post.result.webmSave) * 100) / 100;
+        post.result.webmSave = Math.round((post.result.gifSize / post.result.webmSize) * 100) / 100;
         if (!PROD) console.log(`Link stats: mp4 size: ${post.result.mp4Size} (webm: ${post.result.webmSize});
          that is ${post.result.mp4Save} times smaller (webm: ${post.result.webmSave})`);
 
-        post.mp4link = link;
+        post.mp4 = link;
         cache.setCacheItem(gif, link, post.uploaded);
 
     } catch (e) {
@@ -337,8 +360,8 @@ async function createMp4Link(post, gif, domain) {
     } else if (domain.includes('i.redd.it')) {
 
         try {
-            post = await post.refresh(); // Refresh since post object is the same as before deferral
-            link = post.preview.images[0].variants.mp4.source.url; // JSON hell
+            post.submission = await post.submission.refresh(); // Refresh since post object is the same as before deferral
+            link = post.submission.preview.images[0].variants.mp4.source.url; // JSON hell
         } catch (e) {
         }
 
@@ -360,21 +383,21 @@ async function uploadPost(post) {
         console.log(`waiting with fake upload for ${time}`);
         await delay(time);
         console.log(`Not uploading ${post.url}`);
-        post.mp4link = 'https://gfycat.com/UncomfortablePleasedAnemoneshrimp';
+        post.mp4 = 'https://gfycat.com/UncomfortablePleasedAnemoneshrimp';
         post.uploading = false;
         post.uploaded = true;
         return;
     }
     try {
-        const gif = post.url.endsWith('/') ? post.url.substring(0, post.url.length - 1) : post.url;
+        const gif = post.gif;
         let link = null;
-        const postShortLink = `https://redd.it/${post.id}`;
+        const postShortLink = `https://redd.it/${post.submission.id}`;
 
         await gfycat.authenticate();
         const uploadResult = await gfycat.upload({
             'fetchUrl': gif,
-            'title': `Automatically uploaded gif from ${postShortLink}`,
-            'nsfw': post.over_18 ? '1' : '0'
+            'title': `Automatically uploaded gif from ${postShortLink} (by /u/anti-gif-bot)`,
+            'nsfw': post.nsfw ? '1' : '0'
         });
         await delay(2000);
         while (link === null) {
@@ -388,7 +411,7 @@ async function uploadPost(post) {
             }
         }
         stats.onUpload(gif, link);
-        post.mp4link = link;
+        post.mp4 = link;
         if (link)
             cache.setCacheItem(gif, link, true);
         post.uploading = false;
