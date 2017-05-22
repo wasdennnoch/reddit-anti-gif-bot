@@ -2,7 +2,7 @@
 
 const fs = require('fs');
 const path = require('path');
-const url = require('url');
+const URL = require('url');
 const snoowrap = require('snoowrap');
 const Gfycat = require('gfycat-sdk');
 const request = require('request-promise-native');
@@ -72,6 +72,7 @@ async function update() {
      Total gif/mp4 sizes
      Average gif/mp4 sizes
      Average size save
+     Size save by hoster
      Post deleted
      Post frequency (per interval, sub?)
      NSFW frequency / count?
@@ -98,13 +99,17 @@ async function update() {
         }
         const sorted = [];
         submissions.forEach(post => {
+            const url = post.url;
+            const jsUrl = URL.parse(url);
+            jsUrl.search = null;
+            jsUrl.hash = null;
+            const baseUrl = URL.format(jsUrl);
             const nsfw = post.over_18;
             const subreddit = post.subreddit.display_name;
-            const url = post.url;
             const domain = post.domain;
             const isSelfPost = domain.startsWith('self.');
-            const isGif = url.endsWith('.gif');
-            const isMp4 = url.endsWith('.mp4');
+            const isGif = baseUrl.endsWith('.gif');
+            const isMp4 = baseUrl.endsWith('.mp4');
             const ignoredDomain = includesPartial(vars.ignoreDomains, domain);
             const ignoredSubreddit = vars.ignoreSubreddits.includes(subreddit) ||
                 includesPartial(vars.ignoreSubredditsPartial, subreddit);
@@ -127,11 +132,11 @@ async function update() {
                             nsfw: nsfw,
                             subreddit: subreddit,
                             author: post.author.name,
+                            baseUrl: baseUrl,
                             url: url,
                             domain: domain,
-                            gif: linkToGifLink(url.endsWith('/') ?
-                                url.substring(0, url.length - 1) :
-                                url, domain), // Already convert html link to direct gif links (giphy)
+                            gif: linkToGifLink(baseUrl.endsWith('/') ? baseUrl.substring(0, url.length - 1) : baseUrl,
+                                domain), // Already convert html link to direct gif links (giphy)
                             mp4: undefined,
                             deferCount: 0,
                             deferred: false,
@@ -152,13 +157,13 @@ async function update() {
         let posts = sorted;
         stats.onGifCount(posts.length);
         posts = posts.concat(deferredPosts);
+        deferredPosts = [];
 
         // Handle them all async in parallel
         await Promise.all(posts.map((post) => {
             return parsePost(post)
         }));
 
-        deferredPosts = [];
         for (let i = 0; i < posts.length; i++) {
             const post = posts[i];
             const link = post.mp4;
@@ -176,13 +181,13 @@ async function update() {
                     reply = reply.replace('{{type}}', post.uploaded ? 'mirror' : 'link')
                         .replace('{{mp4link}}', link)
                         .replace('{{sizetext}}', parts.sizetext || defaultParts.sizetext)
-                        .replace('{{webmsizetext}}', post.uploaded ? (parts.webmsizetext || defaultParts.webmsizetext) : '')
+                        .replace('{{webmsizetext}}', post.webmSize ? (parts.webmsizetext || defaultParts.webmsizetext) : '')
                         .replace('{{bonusline}}', parts.bonusline || '')
                         .replace('{{botversion}}', vars.botVersion)
                         .replace('{{mp4sizecomp}}', toFixedFixed(post.mp4Save))
                         .replace('{{gifsize}}', getReadableFileSize(post.gifSize))
                         .replace('{{mp4size}}', getReadableFileSize(post.mp4Size));
-                    if (post.uploaded) {
+                    if (post.webmSize) {
                         reply = reply.replace('{{webmsizecomp}}', toFixedFixed(post.webmSave))
                             .replace('{{webmsize}}', getReadableFileSize(post.webmSize));
                     }
@@ -268,7 +273,7 @@ async function parsePost(post) {
                 post.gifSize = gifCheck.size;
                 if (!gifCheck.success) {
                     if (gifCheck.statusCodeOk) { // Ignore if not found at all
-                        if (gifCheck.wrongType) {
+                        if (!gifCheck.rightType) {
                             if (!PROD) console.log(`Not a gif link: ${post.url}`);
                         } else if (gifCheck.size === -1) {
                             prepareAndUploadPost(post); // Size unknown; it's an unknown hoster anyways since others send a content-length
@@ -311,6 +316,7 @@ async function parsePost(post) {
             const res = await gfycat.getGifDetails({
                 gfyId: link.substring(link.lastIndexOf('/') + 1)
             });
+            // TODO gfycat videos are bigger than the size_restricted variants but better quality, put in reply
             post.mp4Size = res.gfyItem.mp4Size;
             post.webmSize = res.gfyItem.webmSize;
             if (!post.gifSize) {
@@ -340,7 +346,7 @@ async function parsePost(post) {
 
 function calculateSaves(post) {
     post.mp4Save = (post.gifSize / post.mp4Size);
-    if (post.uploaded)
+    if (post.webmSize)
         post.webmSave = (post.gifSize / post.webmSize);
     if (!PROD) console.log(`Link stats: mp4 size: ${post.mp4Size} (webm: ${post.webmSize});
          that is ${post.mp4Save} times smaller (webm: ${post.webmSave})`);
@@ -426,7 +432,7 @@ async function uploadPost(post) {
         return;
     }
     try {
-        const gif = post.gif;
+        const gif = post.url;
         let link = null;
         const postShortLink = `https://redd.it/${post.submission.id}`;
 
@@ -522,9 +528,7 @@ function toFixedFixed(num, decimals = 2) {
 }
 
 function replaceGifWithMp4(url) {
-    if (!url.endsWith('.gif'))
-        throw new Error('URL does not end with .gif');
-    return url.substring(0, url.length - 4) + '.mp4';
+    return url.substring(0, url.lastIndexOf('.')) + '.mp4';
 }
 
 function includesPartial(array, term) {

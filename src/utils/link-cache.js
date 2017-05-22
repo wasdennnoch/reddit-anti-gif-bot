@@ -9,7 +9,7 @@ class LinkCache {
         this.stats = stats;
         this.maxSize = maxSize;
         this.purgeAmount = purgeAmount;
-        this.version = 2;
+        this.version = 3;
         this.load();
     }
 
@@ -23,7 +23,7 @@ class LinkCache {
         if (json.version < this.version) {
             console.log(`[LinkCache] Version difference detected (cache: ${json.version}, current ${this.version}), upgrading cache...`);
             for (let i = 0; i < this.imageCache.length; i++) {
-                this.imageCache[i].times = undefined;
+                this.imageCache = [];
             }
         }
     }
@@ -58,9 +58,9 @@ class LinkCache {
         this.imageCache.push({
             gif: post.gif,
             mp4: post.mp4,
-            gifSize: post.gifSize,
-            mp4Size: post.mp4Size,
-            webmSize: post.webmSize,
+            gifSize: +post.gifSize,
+            mp4Size: +post.mp4Size,
+            webmSize: +post.webmSize,
             uploaded: post.uploaded,
             count: 1,
         });
