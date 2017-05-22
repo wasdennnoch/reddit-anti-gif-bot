@@ -106,6 +106,9 @@ async function update() {
             const isInNonDotGifDomains = includesPartial(vars.nonDotGifDomains, domain);
             const isKnownDomain = isInKnownDomains || isInNonDotGifDomains;
 
+            // TODO Tenor has mp4s as well but only accessible via their API: https://www.tenor.co/gifapi
+            // Problem though: I don't know the gif ID which I need to request the info.
+            // The direct gif links only contain the file SHA1 (?) which doesn't seem to be any useful.
             if (!isSelfPost && !nsfw && !isMp4) {
                 if ((isInKnownDomains && isGif) || isInNonDotGifDomains || isGif) {
                     stats.onGif(url);
@@ -126,7 +129,7 @@ async function update() {
                             gif: linkToGifLink(url.endsWith('/') ?
                                 url.substring(0, url.length - 1) :
                                 url, domain), // Already convert html link to direct gif links (giphy)
-                            mp4: null,
+                            mp4: undefined,
                             deferCount: 0,
                             deferred: false,
                             uploading: false,
@@ -135,8 +138,8 @@ async function update() {
                             gifSize: -1,
                             mp4Size: -1,
                             webmSize: -1,
-                            mp4Save: null,
-                            webmSave: null
+                            mp4Save: undefined,
+                            webmSave: undefined
                         });
                     } else {
                         if (!PROD) console.log(`Ignoring gif; ignored domain: ${ignoredDomain} (${domain}); ignored sureddit: ${ignoredSubreddit} (${subreddit})`);
@@ -164,7 +167,24 @@ async function update() {
             } else if (link) {
                 try {
                     if (PROD) {
-                        const reply = vars.replyTemplate.replace('%%MP4LINK%%', link).replace('%%TYPE%%', post.uploaded ? 'mirror' : 'link');
+                        const templates = vars.replyTemplates;
+                        const allParts = templates.textParts;
+                        let reply = templates.baseReply.join('');
+                        let defaultParts = allParts.default;
+                        let parts = allParts[post.subreddit] ? allParts[post.subreddit] : defaultParts;
+                        reply = reply.replace('{{type}}', post.uploaded ? 'mirror' : 'link')
+                            .replace('{{mp4link}}', link)
+                            .replace('{{sizetext}}', parts.sizetext || defaultParts.sizetext)
+                            .replace('{{webmsizetext}}', post.uploaded ? (parts.webmsizetext || defaultParts.webmsizetext) : '')
+                            .replace('{{bonusline}}', parts.bonusline || '')
+                            .replace('{{mp4sizecomp}}', post.mp4Save)
+                            .replace('{{gifsize}}', post.gifSize)
+                            .replace('{{mp4size}}', post.mp4Size);
+                        if (post.uploaded) { // TODO properly format sizes in MB
+                            reply = reply.replace('{{webmsizecomp}}', post.webmSave)
+                                .replace('{{webmsize}}', post.webmSize);
+                        }
+
                         await post.submission.reply(reply);
                     } else {
                         console.log(`Finished link, uploaded: ${post.uploaded}, link: ${link}`);
@@ -173,7 +193,7 @@ async function update() {
                     if (e.toString().includes('403'))
                         stats.onPossibleBanError(e, post.subreddit);
                     else
-                        throw e;
+                        stats.onLoopError(e);
                 }
             }
         }
@@ -205,7 +225,10 @@ async function parsePost(post) {
             console.log(`Defer count: ${post.deferCount}`);
             console.log(`Uploading: ${post.uploading}`);
             console.log(`Uploaded: ${post.uploaded}`);
-            console.log(`Result: ${Object.keys(post.result).length === 0 ? "Empty" : JSON.stringify(post.result)}`);
+            const tempSubmission = post.submission;
+            post.submission = null; // Don't log the huge submission object
+            console.log(JSON.stringify(post));
+            post.submission = tempSubmission;
             console.log();
         }
         let link = post.mp4;
@@ -219,7 +242,7 @@ async function parsePost(post) {
             link = cacheItem ? cacheItem.mp4 : null;
         }
         if (!post.uploaded && link && link !== 'https://i.giphy.com.mp4') { // Already cached (additional check because of previous parsing bug)
-            post.mp4link = link;
+            post.mp4 = link;
             post.uploaded = cacheItem.uploaded;
             // TODO save and fetch sizes from cache
             // [rem] skipToEnd = true;
@@ -236,8 +259,8 @@ async function parsePost(post) {
 
             if (!post.deferred) {
                 const gifCheck = await checkUrl(gif, 'image/gif', true);
-                post.result.gifCheck = gifCheck;
-                post.result.gifSize = gifCheck.size;
+                post.gifCheck = gifCheck;
+                post.gifSize = gifCheck.size;
                 if (!gifCheck.success) {
                     if (gifCheck.statusCodeOk) { // Ignore if not found at all
                         if (gifCheck.wrongType) {

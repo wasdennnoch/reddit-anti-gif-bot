@@ -31,7 +31,7 @@ module.exports.ignoreSubredditsPartial = config.ignoreSubredditsPartial;
 module.exports.knownDomains = config.knownDomains;
 module.exports.nonDotGifDomains = config.nonDotGifDomains;
 module.exports.saveInterval = config.saveInterval;
-module.exports.replyTemplate = config.replyTemplate;
+module.exports.replyTemplates = config.replyTemplates;
 
 module.exports.userAgent = userAgent;
 module.exports.prod = prod;
