@@ -135,9 +135,9 @@ async function update() {
                             uploading: false,
                             uploaded: false,
                             gfycatLink: false,
-                            gifSize: -1,
-                            mp4Size: -1,
-                            webmSize: -1,
+                            gifSize: NaN,
+                            mp4Size: NaN,
+                            webmSize: NaN,
                             mp4Save: undefined,
                             webmSave: undefined
                         });
@@ -166,28 +166,28 @@ async function update() {
 
             } else if (link) {
                 try {
-                    if (PROD) {
-                        const templates = vars.replyTemplates;
-                        const allParts = templates.textParts;
-                        let reply = templates.baseReply.join('');
-                        let defaultParts = allParts.default;
-                        let parts = allParts[post.subreddit] ? allParts[post.subreddit] : defaultParts;
-                        reply = reply.replace('{{type}}', post.uploaded ? 'mirror' : 'link')
-                            .replace('{{mp4link}}', link)
-                            .replace('{{sizetext}}', parts.sizetext || defaultParts.sizetext)
-                            .replace('{{webmsizetext}}', post.uploaded ? (parts.webmsizetext || defaultParts.webmsizetext) : '')
-                            .replace('{{bonusline}}', parts.bonusline || '')
-                            .replace('{{mp4sizecomp}}', post.mp4Save)
-                            .replace('{{gifsize}}', post.gifSize)
-                            .replace('{{mp4size}}', post.mp4Size);
-                        if (post.uploaded) { // TODO properly format sizes in MB
-                            reply = reply.replace('{{webmsizecomp}}', post.webmSave)
-                                .replace('{{webmsize}}', post.webmSize);
-                        }
+                    const templates = vars.replyTemplates;
+                    const allParts = templates.textParts;
+                    let reply = templates.baseReply.join('');
+                    let defaultParts = allParts.default;
+                    let parts = allParts[post.subreddit] ? allParts[post.subreddit] : defaultParts;
+                    reply = reply.replace('{{type}}', post.uploaded ? 'mirror' : 'link')
+                        .replace('{{mp4link}}', link)
+                        .replace('{{sizetext}}', parts.sizetext || defaultParts.sizetext)
+                        .replace('{{webmsizetext}}', post.uploaded ? (parts.webmsizetext || defaultParts.webmsizetext) : '')
+                        .replace('{{bonusline}}', parts.bonusline || '')
+                        .replace('{{mp4sizecomp}}', toFixedFixed(post.mp4Save))
+                        .replace('{{gifsize}}', getReadableFileSize(post.gifSize))
+                        .replace('{{mp4size}}', getReadableFileSize(post.mp4Size));
+                    if (post.uploaded) {
+                        reply = reply.replace('{{webmsizecomp}}', toFixedFixed(post.webmSave))
+                            .replace('{{webmsize}}', getReadableFileSize(post.webmSize));
+                    }
 
+                    if (PROD) {
                         await post.submission.reply(reply);
                     } else {
-                        console.log(`Finished link, uploaded: ${post.uploaded}, link: ${link}`);
+                        console.log(reply);
                     }
                 } catch (e) {
                     if (e.toString().includes('403'))
@@ -323,8 +323,8 @@ async function parsePost(post) {
             }
             post.mp4Size = mp4Check.size;
         }
-        post.mp4Save = Math.round((post.gifSize / post.mp4Size) * 100) / 100;
-        post.webmSave = Math.round((post.gifSize / post.webmSize) * 100) / 100;
+        post.mp4Save = (post.gifSize / post.mp4Size);
+        post.webmSave = (post.gifSize / post.webmSize);
         if (!PROD) console.log(`Link stats: mp4 size: ${post.mp4Size} (webm: ${post.webmSize});
          that is ${post.mp4Save} times smaller (webm: ${post.webmSave})`);
 
@@ -489,6 +489,27 @@ async function checkUrl(url, filetype, checksize) {
         stats.onLoopError(e);
     }
     return result;
+}
+
+function getReadableFileSize(bytes) {
+    // I'm waiting for Yottabyte-sized gifs
+    const sizes = ['Bytes', 'KB', 'MB', 'GB', 'TB', 'PB', 'EB (Exabyte)', 'ZB (Zettayte)',
+        'YB (Yottabyte)', 'XB (Xenottabyte)', 'SB (Shilentnobyte)', 'DB (Domegemegrottebyte)',
+        'IB (Icosebyte)', 'MB (Monoicosebyte)', 'DB (Diemuxbyte), AB (Andrebyte)',
+        'mb (mbbyte. Not megabyte. The larger one. 1e+45 bytes.)'];
+    // 1e45 is 2907354897182427562197295231552018137414565442749272241125960796722557152453591693304764202855054262243050086425064711734138406514458624 bytes.
+    // 2.907.354.897.182.427.562.197.295.231.552.018.137.414.565.442.749.272.241.125.960.796.722.557.152.453.591.693.304.764.202.855.054.262.243.050.086.425.064.711.734.138.406.514.458.624 fucking bytes.
+    let i = 0;
+    while (bytes > 1024 && i < sizes.length - 1) {
+        i++;
+        bytes /= 1024;
+    }
+    return `${toFixedFixed(bytes)} ${sizes[i]}`;
+}
+
+function toFixedFixed(num, decimals = 2) {
+    decimals = Math.pow(10, decimals);
+    return Math.round(num * decimals) / decimals;
 }
 
 function replaceGifWithMp4(url) {

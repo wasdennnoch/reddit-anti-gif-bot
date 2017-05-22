@@ -29,7 +29,7 @@
         "webmsizetext": "THE WEBM VERSION IS EVEN {{webmsizecomp}} TIMES SMALLER ({{webmsize}}).\r\n\r\n"
       },
       "Ooer": {
-        "bonusline": "bot save me"
+        "bonusline": "bot save me?"
       }
     }
   },
@@ -114,7 +114,6 @@
     "ClashOfClans",
     "WWII",
     "aWeimar",
-    "MMA",
     "marijuanalabs",
     "budtenders",
     "shrimptank",
