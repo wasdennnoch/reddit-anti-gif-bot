@@ -316,7 +316,7 @@ async function parsePost(post) {
             const mp4Check = await checkUrl(link, 'video/mp4', false);
             if (!mp4Check.success) {
                 // defer loading to give giphy/tumblr a bit of time to create an mp4
-                if (!defer(post, gif, 10) && mp4Check.size < 1000) { // only upload if bigger than a KB
+                if (!defer(post, gif, 10)) {
                     prepareAndUploadPost(post);
                 }
                 return;

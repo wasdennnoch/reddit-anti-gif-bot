@@ -15,7 +15,7 @@ class LinkCache {
 
     load() {
         let json = {
-            version: this.version,
+            version: 0,
             imageCache: []
         };
         Object.assign(json, JSON.parse(fs.readFileSync(this.path, {encoding: 'utf8'}) || '{}'));
