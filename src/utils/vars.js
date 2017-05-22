@@ -13,7 +13,8 @@ const secretPath = path.join(__dirname, '..', '..', '.secret');
 const keys = JSON.parse(fs.readFileSync(path.join(secretPath, 'keys.json'), 'utf8'));
 const config = JSON.parse(fs.readFileSync(configPath, 'utf8'));
 
-const userAgent = `bot:anti-gif-bot:${pkgReader.getVersion()}`;
+const botVersion = pkgReader.getVersion();
+const userAgent = `bot:anti-gif-bot:${botVersion}`;
 const prod = process.env.PROD || false;
 const log = !prod;
 
@@ -33,6 +34,7 @@ module.exports.nonDotGifDomains = config.nonDotGifDomains;
 module.exports.saveInterval = config.saveInterval;
 module.exports.replyTemplates = config.replyTemplates;
 
+module.exports.botVersion = botVersion;
 module.exports.userAgent = userAgent;
 module.exports.prod = prod;
 module.exports.log = log;

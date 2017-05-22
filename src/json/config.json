@@ -13,7 +13,7 @@
       "{{sizetext}}{{webmsizetext}}{{bonusline}}\r\n",
       "\r\n",
       "---\r\n",
-      ">*Beep, I'm a bot.* [FAQ](https://np.reddit.com/r/anti_gif_bot/wiki/index) | [author](https://np.reddit.com/message/compose?to=MrWasdennnoch) | [source](https://github.com/wasdennnoch/reddit-anti-gif-bot)"
+      ">*Beep, I'm a bot.* [FAQ](https://np.reddit.com/r/anti_gif_bot/wiki/index) | [author](https://np.reddit.com/message/compose?to=MrWasdennnoch) | [source](https://github.com/wasdennnoch/reddit-anti-gif-bot) | v{{botversion}}"
     ],
     "textParts": {
       "default": {
@@ -51,7 +51,8 @@
     "imgur.com",
     "memecenter.com",
     "memecdn.com",
-    "wallgif.com"
+    "wallgif.com",
+    "redditmedia.com"
   ],
   "ignoreSubreddits": [
     "menkissing",

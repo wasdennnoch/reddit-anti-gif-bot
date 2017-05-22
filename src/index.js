@@ -2,6 +2,7 @@
 
 const fs = require('fs');
 const path = require('path');
+const url = require('url');
 const snoowrap = require('snoowrap');
 const Gfycat = require('gfycat-sdk');
 const request = require('request-promise-native');
@@ -55,6 +56,10 @@ module.exports.stop = () => {
 module.exports.start(); // I'll change the structure a bit in the future so I already extracted the start function
 
 
+// TODO Tenor has mp4s as well but only accessible via their API: https://www.tenor.co/gifapi
+// Problem though: I don't know the gif ID which I need to request the info.
+// The direct gif links only contain the file SHA1 (?) which doesn't seem to be any useful.
+
 async function update() {
 
     /* TODO stats about:
@@ -63,6 +68,7 @@ async function update() {
      mp4 not available (mainly giphy, sometimes tumblr)
      Broken link
      Already on gfycat
+     gfycat upload time (with stages)
      Total gif/mp4 sizes
      Average gif/mp4 sizes
      Average size save
@@ -106,9 +112,6 @@ async function update() {
             const isInNonDotGifDomains = includesPartial(vars.nonDotGifDomains, domain);
             const isKnownDomain = isInKnownDomains || isInNonDotGifDomains;
 
-            // TODO Tenor has mp4s as well but only accessible via their API: https://www.tenor.co/gifapi
-            // Problem though: I don't know the gif ID which I need to request the info.
-            // The direct gif links only contain the file SHA1 (?) which doesn't seem to be any useful.
             if (!isSelfPost && !nsfw && !isMp4) {
                 if ((isInKnownDomains && isGif) || isInNonDotGifDomains || isGif) {
                     stats.onGif(url);
@@ -175,6 +178,7 @@ async function update() {
                         .replace('{{sizetext}}', parts.sizetext || defaultParts.sizetext)
                         .replace('{{webmsizetext}}', post.uploaded ? (parts.webmsizetext || defaultParts.webmsizetext) : '')
                         .replace('{{bonusline}}', parts.bonusline || '')
+                        .replace('{{botversion}}', vars.botVersion)
                         .replace('{{mp4sizecomp}}', toFixedFixed(post.mp4Save))
                         .replace('{{gifsize}}', getReadableFileSize(post.gifSize))
                         .replace('{{mp4size}}', getReadableFileSize(post.mp4Size));
