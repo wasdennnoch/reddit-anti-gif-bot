@@ -9,15 +9,23 @@ class LinkCache {
         this.stats = stats;
         this.maxSize = maxSize;
         this.purgeAmount = purgeAmount;
+        this.version = 2;
         this.load();
     }
 
     load() {
         let json = {
+            version: this.version,
             imageCache: []
         };
         Object.assign(json, JSON.parse(fs.readFileSync(this.path, {encoding: 'utf8'}) || '{}'));
         this.imageCache = json.imageCache;
+        if (json.version < this.version) {
+            console.log(`[LinkCache] Version difference detected (cache: ${json.version}, current ${this.version}), upgrading cache...`);
+            for (let i = 0; i < this.imageCache.length; i++) {
+                this.imageCache[i].times = undefined;
+            }
+        }
     }
 
     save() {
@@ -27,6 +35,7 @@ class LinkCache {
             this.stats.onCacheSizeChange(this.imageCache.length);
         }
         const json = {
+            version: this.version,
             imageCache: this.imageCache
         };
         fs.writeFile(this.path, JSON.stringify(json, null, 2), (e) => {
@@ -39,21 +48,21 @@ class LinkCache {
             const item = this.imageCache[i];
             if (item.gif === gif) {
                 item.count++;
-                item.times.push(Date.now());
                 return item;
             }
         }
         return null;
     }
 
-    setCacheItem(gif, mp4, uploaded) {
-        this.imageCache[gif] = mp4;
+    setCacheItem(post) {
         this.imageCache.push({
-            gif: gif,
-            mp4: mp4,
-            uploaded: uploaded,
+            gif: post.gif,
+            mp4: post.mp4,
+            gifSize: post.gifSize,
+            mp4Size: post.mp4Size,
+            webmSize: post.webmSize,
+            uploaded: post.uploaded,
             count: 1,
-            times: [Date.now()]
         });
         this.stats.onCacheSizeChange(this.imageCache.length);
     }

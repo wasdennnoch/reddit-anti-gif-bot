@@ -134,10 +134,9 @@ async function update() {
                             deferred: false,
                             uploading: false,
                             uploaded: false,
-                            gfycatLink: false,
-                            gifSize: NaN,
-                            mp4Size: NaN,
-                            webmSize: NaN,
+                            gifSize: undefined,
+                            mp4Size: undefined,
+                            webmSize: undefined,
                             mp4Save: undefined,
                             webmSave: undefined
                         });
@@ -226,7 +225,7 @@ async function parsePost(post) {
             console.log(`Uploading: ${post.uploading}`);
             console.log(`Uploaded: ${post.uploaded}`);
             const tempSubmission = post.submission;
-            post.submission = null; // Don't log the huge submission object
+            post.submission = undefined; // Don't log the huge submission object
             console.log(JSON.stringify(post));
             post.submission = tempSubmission;
             console.log();
@@ -241,12 +240,14 @@ async function parsePost(post) {
             cacheItem = cache.getCacheItem(gif);
             link = cacheItem ? cacheItem.mp4 : null;
         }
-        if (!post.uploaded && link && link !== 'https://i.giphy.com.mp4') { // Already cached (additional check because of previous parsing bug)
+        if (!post.uploaded && link && link !== 'https://i.giphy.com.mp4' && !link.endsWith('..mp4')) { // Already cached (additional checks because of previous parsing bugs)
             post.mp4 = link;
+            post.gifSize = cacheItem.gifSize;
+            post.mp4Size = cacheItem.mp4Size;
+            post.webmSize = cacheItem.webmSize;
             post.uploaded = cacheItem.uploaded;
-            // TODO save and fetch sizes from cache
-            // [rem] skipToEnd = true;
             stats.onCachedGif(gif, link);
+            calculateSaves(post);
             return;
         }
         if (post.author === '[deleted]') {
@@ -301,7 +302,6 @@ async function parsePost(post) {
         }
 
         const gfycatLink = /^https?:\/\/gfycat.com/.test(link);
-        post.gfycatLink = gfycatLink;
         if (gfycatLink) {
             await gfycat.authenticate();
             const res = await gfycat.getGifDetails({
@@ -309,7 +309,7 @@ async function parsePost(post) {
             });
             post.mp4Size = res.gfyItem.mp4Size;
             post.webmSize = res.gfyItem.webmSize;
-            if (post.gifSize) {
+            if (!post.gifSize) {
                 post.gifSize = res.gfyItem.gifSize;
             }
         } else {
@@ -323,18 +323,23 @@ async function parsePost(post) {
             }
             post.mp4Size = mp4Check.size;
         }
-        post.mp4Save = (post.gifSize / post.mp4Size);
-        post.webmSave = (post.gifSize / post.webmSize);
-        if (!PROD) console.log(`Link stats: mp4 size: ${post.mp4Size} (webm: ${post.webmSize});
-         that is ${post.mp4Save} times smaller (webm: ${post.webmSave})`);
+        calculateSaves(post);
 
         post.mp4 = link;
-        cache.setCacheItem(gif, link, post.uploaded);
+        cache.setCacheItem(post);
 
     } catch (e) {
         stats.onLoopError(e);
     }
 
+}
+
+function calculateSaves(post) {
+    post.mp4Save = (post.gifSize / post.mp4Size);
+    if (post.uploaded)
+        post.webmSave = (post.gifSize / post.webmSize);
+    if (!PROD) console.log(`Link stats: mp4 size: ${post.mp4Size} (webm: ${post.webmSize});
+         that is ${post.mp4Save} times smaller (webm: ${post.webmSave})`);
 }
 
 function defer(post, gif, count = 3) { // TODO extract counts to config
