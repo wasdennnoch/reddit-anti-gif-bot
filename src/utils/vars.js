@@ -1,5 +1,6 @@
 'use strict';
 
+// TODO make config class
 const fs = require('fs');
 const path = require('path');
 const pkgReader = require('../utils/package-reader');
@@ -15,10 +16,9 @@ const config = JSON.parse(fs.readFileSync(configPath, 'utf8'));
 
 const botVersion = pkgReader.getVersion();
 const userAgent = `bot:anti-gif-bot:${botVersion}`;
-const prod = process.env.PROD || false;
-const log = !prod;
+const PROD = process.env.PROD || false;
 
-const stats = new Stats(statsPath, log);
+const stats = new Stats(statsPath, !PROD);
 const cache = new LinkCache(cachePath, stats, config.cacheSize, config.cachePurgeSize);
 
 
@@ -33,10 +33,11 @@ exports.knownDomains = config.knownDomains;
 exports.nonDotGifDomains = config.nonDotGifDomains;
 exports.saveInterval = config.saveInterval;
 exports.replyTemplates = config.replyTemplates;
+exports.redditMp4DeferCount = config.redditMp4DeferCount;
+exports.generalMp4DeferCount = config.generalMp4DeferCount;
 
 exports.botVersion = botVersion;
 exports.userAgent = userAgent;
-exports.prod = prod;
-exports.log = log;
+exports.prod = PROD;
 exports.stats = stats;
 exports.cache = cache;

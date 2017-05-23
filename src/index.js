@@ -292,7 +292,7 @@ async function parsePost(post) {
                 if (domain.includes('i.redd.it')) {
                     // defer loading posts from i.redd.it to avoid an issue where the 'preview' item isn't
                     // yet loaded in the post (probably takes time to process)
-                    if (!defer(post, gif)) {
+                    if (!defer(post, gif, vars.redditMp4DeferCount)) {
                         prepareAndUploadPost(post);
                     }
                     return;
@@ -326,7 +326,7 @@ async function parsePost(post) {
             const mp4Check = await checkUrl(link, 'video/mp4', false);
             if (!mp4Check.success) {
                 // defer loading to give giphy/tumblr a bit of time to create an mp4
-                if (!defer(post, gif, 10)) {
+                if (!defer(post, gif, vars.generalMp4DeferCount)) {
                     prepareAndUploadPost(post);
                 }
                 return;
@@ -352,7 +352,7 @@ function calculateSaves(post) {
          that is ${post.mp4Save} times smaller (webm: ${post.webmSave})`);
 }
 
-function defer(post, gif, count = 3) { // TODO extract counts to config
+function defer(post, gif, count) {
     if (post.deferCount < count) {
         post.deferCount++;
         post.deferred = true;
