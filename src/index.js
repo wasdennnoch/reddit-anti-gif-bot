@@ -332,7 +332,6 @@ async function parsePost(post) {
             const res = await gfycat.getGifDetails({
                 gfyId: link.substring(link.lastIndexOf('/') + 1)
             });
-            // TODO gfycat videos are bigger than the size_restricted variants but better quality, put in reply
             post.mp4Size = res.gfyItem.mp4Size;
             post.webmSize = res.gfyItem.webmSize;
             if (!post.gifSize) {
