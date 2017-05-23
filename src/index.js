@@ -174,6 +174,8 @@ async function update() {
 
             } else if (link) {
                 try {
+                    const gfycatLink = /^https?:\/\/gfycat.com/.test(link);
+                    const mp4Bigger = post.mp4Save < 1;
                     const templates = vars.replyTemplates;
                     const allParts = templates.textParts;
                     let reply = templates.baseReply.join('');
@@ -184,9 +186,16 @@ async function update() {
                         .replace('{{mp4link}}', link)
                         .replace('{{botversion}}', vars.botVersion);
 
-                    content = parts.sizetext || defaultParts.sizetext;
-                    if (post.webmSize) {
-                        content += parts.webmsizetext || defaultParts.webmsizetext;
+                    if (!mp4Bigger) {
+                        content = parts.sizetext || defaultParts.sizetext;
+                        if (post.webmSize) {
+                            content += parts.webmsizetext || defaultParts.webmsizetext;
+                        }
+                    } else {
+                        content = parts.mp4biggertext || defaultParts.mp4biggertext;
+                        if (gfycatLink) {
+                            content += parts.gfycatbiggertext || defaultParts.gfycatbiggertext;
+                        }
                     }
                     if (parts.bonusline) {
                         content += parts.bonusline;
