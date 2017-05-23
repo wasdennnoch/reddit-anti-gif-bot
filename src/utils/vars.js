@@ -18,7 +18,7 @@ const botVersion = pkgReader.getVersion();
 const userAgent = `bot:anti-gif-bot:${botVersion}`;
 const PROD = process.env.PROD || false;
 
-const stats = new Stats(statsPath, !PROD);
+const stats = new Stats(statsPath, PROD);
 const cache = new LinkCache(cachePath, stats, config.cacheSize, config.cachePurgeSize);
 
 

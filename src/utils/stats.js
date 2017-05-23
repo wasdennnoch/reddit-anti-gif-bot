@@ -1,15 +1,16 @@
 'use strict';
 
 const fs = require('fs');
+const log = require('./log');
 
-let log;
+let PROD;
 
 class Stats {
 
-    constructor(statsPath, logging) {
+    constructor(statsPath, prod) {
         this.path = statsPath;
         this.lastSaveTime = Date.now();
-        log = logging;
+        PROD = prod;
         this.load();
     }
 
@@ -58,7 +59,7 @@ class Stats {
     }
 
     save() {
-        if (log) console.log('SAVE----------------------------');
+        if (!PROD) log('SAVE----------------------------');
         this.runtime += (Date.now() - this.lastSaveTime);
         this.lastSaveTime = Date.now();
         const json = {
@@ -83,21 +84,21 @@ class Stats {
             subreddits: this.subreddits,
         };
         fs.writeFile(this.path, JSON.stringify(json, null, 2), (e) => {
-            if (e) console.log(`[!]-- Error saving stats: ${e.toString()}`);
+            if (e) log(`[!]-- Error saving stats: ${e.toString()}`);
         });
     }
 
     onLoop() {
-        if (log) console.log('LOOP----------------------------');
+        if (!PROD) log('LOOP----------------------------');
         this.loops++;
     }
 
     onLoopError(e) {
         const str = e.toString();
-        console.log(`Loop error: ${str}`);
+        log(`Loop error: ${str}`);
         if (!str.includes("Cannot read property 'images' of undefined") && !str.includes('No items returned')
             && !str.includes('RequestError') && !str.includes('ratelimit') && !str.includes('StatusCodeError'))
-            console.log(e);
+            log(e);
         if (!this.loopErrors[str])
             this.loopErrors[str] = 0;
         this.loopErrors[str]++;
@@ -105,8 +106,8 @@ class Stats {
 
     onPossibleBanError(e, sub) {
         const str = e.toString();
-        console.log(`Possible ban error in '${sub}': ${str}`);
-        console.log(e);
+        log(`Possible ban error in '${sub}': ${str}`);
+        log(e);
         const saveString = `[${sub}]: ${str}`;
         if (!this.possibeBanErrors[saveString])
             this.possibeBanErrors[saveString] = 0;
@@ -122,17 +123,17 @@ class Stats {
     }
 
     onSubmissions(count) {
-        if (log) console.log(`Submissions: ${count}`);
+        if (!PROD) log(`Submissions: ${count}`);
         this.totalSubmissions += count;
     }
 
     onUpload(gif, link) {
-        if (log) console.log(`Uploaded: ${gif} --> ${link}`);
+        if (!PROD) log(`Uploaded: ${gif} --> ${link}`);
         this.uploadedGifCount++;
     }
 
     onGif(gif) {
-        if (log) console.log(`Got gif: ${gif}`);
+        if (!PROD) log(`Got gif: ${gif}`);
         this.totalGifSubmissions++;
     }
 
@@ -154,17 +155,17 @@ class Stats {
     }
 
     onCachedGif(gif, link) {
-        if (log) console.log(`Already have cached link of ${gif} --> ${link}`);
+        if (!PROD) log(`Already have cached link of ${gif} --> ${link}`);
         this.cachedGifsCount++;
     }
 
     onDefer(gif) {
-        if (log) console.log(`Deferred loading of ${gif}`);
+        if (!PROD) log(`Deferred loading of ${gif}`);
         this.deferCount++;
     }
 
     onDeferFail(gif) {
-        if (log) console.log(`Failed loading of deferred gif ${gif}`);
+        if (!PROD) log(`Failed loading of deferred gif ${gif}`);
         this.deferFails++;
     }
 

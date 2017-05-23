@@ -8,6 +8,7 @@ const Gfycat = require('gfycat-sdk');
 const request = require('request-promise-native');
 const deasync = require('deasync');
 const vars = require('./utils/vars');
+const log = require('./utils/log');
 
 const PROD = vars.prod;
 
@@ -37,18 +38,18 @@ let lastPost = undefined;
 let loops = 0; // keep track of loops here to regulary persist stats/cache
 let deferredPosts = [];
 
-console.log('[anti-gif-bot] Ready.');
+log('[anti-gif-bot] Ready.');
 
 module.exports.start = () => {
     if (!loopInterval) {
-        console.log('[anti-gif-bot] Started.');
+        log('[anti-gif-bot] Started.');
         loopInterval = setInterval(update, vars.updateInterval);
         update();
     }
 };
 module.exports.stop = () => {
     if (loopInterval) {
-        console.log('[anti-gif-bot] Stopped.');
+        log('[anti-gif-bot] Stopped.');
         clearInterval(loopInterval);
         loopInterval = null;
     }
@@ -149,7 +150,7 @@ async function update() {
                             webmSave: undefined
                         });
                     } else {
-                        if (!PROD) console.log(`Ignoring gif; ignored domain: ${ignoredDomain} (${domain}); ignored sureddit: ${ignoredSubreddit} (${subreddit})`);
+                        if (!PROD) log(`Ignoring gif; ignored domain: ${ignoredDomain} (${domain}); ignored sureddit: ${ignoredSubreddit} (${subreddit})`);
                     }
                 }
             }
@@ -195,7 +196,7 @@ async function update() {
                     if (PROD) {
                         await post.submission.reply(reply);
                     } else {
-                        console.log(reply);
+                        log(reply);
                     }
                 } catch (e) {
                     if (e.toString().includes('403'))
@@ -224,20 +225,20 @@ async function parsePost(post) {
         const domain = post.domain;
         const gif = post.gif;
         if (!PROD) {
-            console.log();
-            console.log(`Got post by: ${post.author} in ${post.subreddit}`);
-            console.log(`Url: ${post.url}`);
-            console.log(`Gif: ${post.gif}`);
-            console.log(`mp4: ${post.mp4}`);
-            console.log(`Deferred: ${post.deferred}`);
-            console.log(`Defer count: ${post.deferCount}`);
-            console.log(`Uploading: ${post.uploading}`);
-            console.log(`Uploaded: ${post.uploaded}`);
+            log();
+            log(`Got post by: ${post.author} in ${post.subreddit}`);
+            log(`Url: ${post.url}`);
+            log(`Gif: ${post.gif}`);
+            log(`mp4: ${post.mp4}`);
+            log(`Deferred: ${post.deferred}`);
+            log(`Defer count: ${post.deferCount}`);
+            log(`Uploading: ${post.uploading}`);
+            log(`Uploaded: ${post.uploaded}`);
             const tempSubmission = post.submission;
             post.submission = undefined; // Don't log the huge submission object
-            console.log(JSON.stringify(post));
+            log(JSON.stringify(post));
             post.submission = tempSubmission;
-            console.log();
+            log();
         }
         let link = post.mp4;
         let skipToEnd = false;
@@ -261,7 +262,7 @@ async function parsePost(post) {
         }
         if (post.author === '[deleted]') {
             post.deferred = false;
-            if (!PROD) console.log('Ignoring post since it got deleted');
+            if (!PROD) log('Ignoring post since it got deleted');
             return; // If post got deleted during deferral just ignore it
         }
 
@@ -274,14 +275,14 @@ async function parsePost(post) {
                 if (!gifCheck.success) {
                     if (gifCheck.statusCodeOk) { // Ignore if not found at all
                         if (!gifCheck.rightType) {
-                            if (!PROD) console.log(`Not a gif link: ${post.url}`);
+                            if (!PROD) log(`Not a gif link: ${post.url}`);
                         } else if (gifCheck.size === -1) {
                             prepareAndUploadPost(post); // Size unknown; it's an unknown hoster anyways since others send a content-length
                         } else {
-                            if (!PROD) console.log(`Gif too small (and not deferred), skipping (size: ${gifCheck.size})`);
+                            if (!PROD) log(`Gif too small (and not deferred), skipping (size: ${gifCheck.size})`);
                         }
                     } else {
-                        if (!PROD) console.log(`Not a working link, got status code ${gifCheck.statusCode}: ${post.url}`);
+                        if (!PROD) log(`Not a working link, got status code ${gifCheck.statusCode}: ${post.url}`);
                     }
                     return;
                 }
@@ -306,7 +307,7 @@ async function parsePost(post) {
         }
 
         if (!link) {
-            if (!PROD) console.log(`No link gotten for ${gif}`);
+            if (!PROD) log(`No link gotten for ${gif}`);
             return;
         }
 
@@ -348,7 +349,7 @@ function calculateSaves(post) {
     post.mp4Save = (post.gifSize / post.mp4Size);
     if (post.webmSize)
         post.webmSave = (post.gifSize / post.webmSize);
-    if (!PROD) console.log(`Link stats: mp4 size: ${post.mp4Size} (webm: ${post.webmSize});
+    if (!PROD) log(`Link stats: mp4 size: ${post.mp4Size} (webm: ${post.webmSize});
          that is ${post.mp4Save} times smaller (webm: ${post.webmSave})`);
 }
 
@@ -423,9 +424,9 @@ function prepareAndUploadPost(post) {
 async function uploadPost(post) {
     if (!PROD) {
         const time = 5000 + Math.random() * 40000;
-        console.log(`waiting with fake upload for ${time}`);
+        log(`waiting with fake upload for ${time}`);
         await delay(time);
-        console.log(`Not uploading ${post.url}`);
+        log(`Not uploading ${post.url}`);
         post.mp4 = 'https://gfycat.com/UncomfortablePleasedAnemoneshrimp';
         post.uploading = false;
         post.uploaded = true;
@@ -497,8 +498,8 @@ async function checkUrl(url, filetype, checksize) {
             result.success = result.rightType && result.aboveSizeThreshold;
         }
         if (!PROD) {
-            console.log(`Checked ${url}`);
-            console.log(JSON.stringify(result));
+            log(`Checked ${url}`);
+            log(JSON.stringify(result));
         }
     } catch (e) {
         stats.onLoopError(e);
