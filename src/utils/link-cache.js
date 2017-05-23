@@ -9,7 +9,7 @@ class LinkCache {
         this.stats = stats;
         this.maxSize = maxSize;
         this.purgeAmount = purgeAmount;
-        this.version = 3;
+        this.version = 4;
         this.load();
     }
 
@@ -22,9 +22,13 @@ class LinkCache {
         this.imageCache = json.imageCache;
         if (json.version < this.version) {
             console.log(`[LinkCache] Version difference detected (cache: ${json.version}, current ${this.version}), upgrading cache...`);
-            for (let i = 0; i < this.imageCache.length; i++) {
-                this.imageCache = [];
-            }
+            this.imageCache.forEach(item => {
+                if (item.uploaded === false)
+                    item.uploaded = undefined;
+                if (item.webmSize === null)
+                    item.webmSize = undefined;
+            });
+            this.save();
         }
     }
 
@@ -48,6 +52,8 @@ class LinkCache {
             const item = this.imageCache[i];
             if (item.gif === gif) {
                 item.count++;
+                if (item.uploaded === undefined)
+                    item.uploaded = false;
                 return item;
             }
         }
@@ -55,13 +61,14 @@ class LinkCache {
     }
 
     setCacheItem(post) {
+        // Set some unnecessary items to undefined to not save them in the JSON (makes it a bit smaller)
         this.imageCache.push({
             gif: post.gif,
             mp4: post.mp4,
             gifSize: +post.gifSize,
             mp4Size: +post.mp4Size,
-            webmSize: +post.webmSize,
-            uploaded: post.uploaded,
+            webmSize: post.webmSize !== undefined ? +post.webmSize : undefined,
+            uploaded: post.uploaded ? true : undefined,
             count: 1,
         });
         this.stats.onCacheSizeChange(this.imageCache.length);
