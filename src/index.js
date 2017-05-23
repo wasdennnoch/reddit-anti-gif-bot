@@ -178,23 +178,22 @@ async function update() {
                     const mp4Bigger = post.mp4Save < 1;
                     const templates = vars.replyTemplates;
                     const allParts = templates.textParts;
+                    const parts = Object.assign({}, allParts.default, allParts[post.subreddit]);
                     let reply = templates.baseReply.join('');
                     let content = '';
-                    let defaultParts = allParts.default;
-                    let parts = allParts[post.subreddit] ? allParts[post.subreddit] : defaultParts;
                     reply = reply.replace('{{type}}', post.uploaded ? 'mirror' : 'link')
                         .replace('{{mp4link}}', link)
                         .replace('{{botversion}}', vars.botVersion);
 
                     if (!mp4Bigger) {
-                        content = parts.sizetext || defaultParts.sizetext;
+                        content = parts.sizetext;
                         if (post.webmSize) {
-                            content += parts.webmsizetext || defaultParts.webmsizetext;
+                            content += parts.webmsizetext;
                         }
                     } else {
-                        content = parts.mp4biggertext || defaultParts.mp4biggertext;
+                        content = parts.mp4biggertext;
                         if (gfycatLink) {
-                            content += parts.gfycatbiggertext || defaultParts.gfycatbiggertext;
+                            content += parts.gfycatbiggertext;
                         }
                     }
                     if (parts.bonusline) {
