@@ -12,7 +12,7 @@
       "[mp4 {{type}}]({{mp4link}})\r\n",
       "\r\n",
       "---\r\n",
-      "{{sizetext}}{{webmsizetext}}{{bonusline}}\r\n",
+      "{{content}}\r\n",
       "\r\n",
       "---\r\n",
       ">*Beep, I'm a bot.* [FAQ](https://np.reddit.com/r/anti_gif_bot/wiki/index) | [author](https://np.reddit.com/message/compose?to=MrWasdennnoch) | [source](https://github.com/wasdennnoch/reddit-anti-gif-bot) | v{{botversion}}"
@@ -32,6 +32,10 @@
       },
       "Ooer": {
         "bonusline": "bot save me?"
+      },
+      "PeopleFuckingDying": {
+        "sizetext": "THis mp4 VersIOn iS {{mp4sizecomp}} TIMEs SMALLER tHAn THe gif ({{gifsize}} vS {{mp4size}}).  \r\n",
+        "webmsizetext": "THE WebM VeRSioN Is EVeN {{webmsizecomp}} TimeS SmALLER ({{webmsize}}).\r\n\r\n"
       }
     }
   },

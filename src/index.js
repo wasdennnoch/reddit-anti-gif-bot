@@ -177,21 +177,28 @@ async function update() {
                     const templates = vars.replyTemplates;
                     const allParts = templates.textParts;
                     let reply = templates.baseReply.join('');
+                    let content = '';
                     let defaultParts = allParts.default;
                     let parts = allParts[post.subreddit] ? allParts[post.subreddit] : defaultParts;
                     reply = reply.replace('{{type}}', post.uploaded ? 'mirror' : 'link')
                         .replace('{{mp4link}}', link)
-                        .replace('{{sizetext}}', parts.sizetext || defaultParts.sizetext)
-                        .replace('{{webmsizetext}}', post.webmSize ? (parts.webmsizetext || defaultParts.webmsizetext) : '')
-                        .replace('{{bonusline}}', parts.bonusline || '')
-                        .replace('{{botversion}}', vars.botVersion)
-                        .replace('{{mp4sizecomp}}', toFixedFixed(post.mp4Save))
-                        .replace('{{gifsize}}', getReadableFileSize(post.gifSize))
-                        .replace('{{mp4size}}', getReadableFileSize(post.mp4Size));
+                        .replace('{{botversion}}', vars.botVersion);
+
+                    content = parts.sizetext || defaultParts.sizetext;
                     if (post.webmSize) {
-                        reply = reply.replace('{{webmsizecomp}}', toFixedFixed(post.webmSave))
-                            .replace('{{webmsize}}', getReadableFileSize(post.webmSize));
+                        content += parts.webmsizetext || defaultParts.webmsizetext;
                     }
+                    if (parts.bonusline) {
+                        content += parts.bonusline;
+                    }
+                    content = content
+                        .replace('{{mp4sizecomp}}', toFixedFixed(post.mp4Save))
+                        .replace('{{webmsizecomp}}', toFixedFixed(post.webmSave))
+                        .replace('{{gifsize}}', getReadableFileSize(post.gifSize))
+                        .replace('{{mp4size}}', getReadableFileSize(post.mp4Size))
+                        .replace('{{webmsize}}', getReadableFileSize(post.webmSize));
+
+                    reply = reply.replace('{{content}}', content);
 
                     if (PROD) {
                         await post.submission.reply(reply);
