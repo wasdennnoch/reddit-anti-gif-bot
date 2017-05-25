@@ -349,7 +349,7 @@ async function parsePost(post) {
         calculateSaves(post);
 
         post.mp4 = link;
-        c.cache.setCacheItem(post);
+        c.cache.addCacheItem(post);
 
     } catch (e) {
         c.stats.onLoopError(e);
@@ -452,7 +452,7 @@ async function uploadPost(post) {
         await gfycat.authenticate();
         const uploadResult = await gfycat.upload({
             'fetchUrl': gif,
-            'title': `Automatically uploaded gif from ${postShortLink} (by /u/anti-gif-bot)`,
+            'title': `Automatically uploaded gif from ${postShortLink} (by /u/${reddit.username})`,
             'nsfw': post.nsfw ? '1' : '0'
         });
         await delay(2000);
@@ -469,7 +469,7 @@ async function uploadPost(post) {
         c.stats.onUpload(gif, link);
         post.mp4 = link;
         if (link)
-            c.cache.setCacheItem(gif, link, true);
+            c.cache.addCacheItem(post);
         post.uploading = false;
         post.uploaded = true;
     } catch (e) {
