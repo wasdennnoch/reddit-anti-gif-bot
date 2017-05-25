@@ -73,6 +73,7 @@ async function update() {
      Total gif/mp4 sizes
      Average gif/mp4 sizes
      Average size save
+     mp4 bigger
      Size save by hoster
      Post deleted
      Post frequency (per interval, sub?)
