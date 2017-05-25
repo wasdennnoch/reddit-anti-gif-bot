@@ -6,21 +6,18 @@ const URL = require('url');
 const snoowrap = require('snoowrap');
 const Gfycat = require('gfycat-sdk');
 const request = require('request-promise-native');
-const deasync = require('deasync');
-const vars = require('./utils/vars');
+const Config = require('./utils/config');
 const log = require('./utils/log');
 
-const PROD = vars.prod;
+const c = new Config();
+const PROD = Config.PROD;
 
-const stats = vars.stats;
-const cache = vars.cache;
-const userAgent = vars.userAgent;
 const reddit = new snoowrap({
-    userAgent: userAgent,
-    clientId: vars.reddit.clientId,
-    clientSecret: vars.reddit.clientSecret,
-    username: vars.reddit.username,
-    password: vars.reddit.password
+    userAgent: Config.userAgent,
+    clientId: c.reddit.clientId,
+    clientSecret: c.reddit.clientSecret,
+    username: c.reddit.username,
+    password: c.reddit.password
 });
 reddit.config({
     retryErrorCodes: [], // Disable automatic retry to not spam reddit since we loop anyways,
@@ -28,8 +25,8 @@ reddit.config({
     warnings: !PROD
 });
 const gfycat = new Gfycat({
-    clientId: vars.gfycat.clientId,
-    clientSecret: vars.gfycat.clientSecret
+    clientId: c.gfycat.clientId,
+    clientSecret: c.gfycat.clientSecret
 });
 if (!PROD) gfycat.apiVersion = '/v1test';
 
@@ -43,7 +40,7 @@ log('[anti-gif-bot] Ready.');
 module.exports.start = () => {
     if (!loopInterval) {
         log('[anti-gif-bot] Started.');
-        loopInterval = setInterval(update, vars.updateInterval);
+        loopInterval = setInterval(update, c.updateInterval);
         update();
     }
 };
@@ -86,14 +83,14 @@ async function update() {
     try {
 
         loops++;
-        stats.onLoop();
+        c.stats.onLoop();
         const submissions = await reddit.getNew('all', { // new posts in /r/all
             limit: 100, // maximum per API guidelines
             show: 'all', // disable some filters
             before: lastPost
         });
 
-        stats.onSubmissions(submissions.length);
+        c.stats.onSubmissions(submissions.length);
         if (submissions.length > 0) {
             lastPost = submissions[0].name;
         } else {
@@ -112,21 +109,21 @@ async function update() {
             const isSelfPost = domain.startsWith('self.');
             const isGif = baseUrl.endsWith('.gif');
             const isMp4 = baseUrl.endsWith('.mp4');
-            const ignoredDomain = includesPartial(vars.ignoreDomains, domain);
-            const ignoredSubreddit = vars.ignoreSubreddits.includes(subreddit) ||
-                includesPartial(vars.ignoreSubredditsPartial, subreddit);
-            const isInKnownDomains = includesPartial(vars.knownDomains, domain);
-            const isInNonDotGifDomains = includesPartial(vars.nonDotGifDomains, domain);
+            const ignoredDomain = includesPartial(c.ignoreDomains, domain);
+            const ignoredSubreddit = c.ignoreSubreddits.includes(subreddit) ||
+                includesPartial(c.ignoreSubredditsPartial, subreddit);
+            const isInKnownDomains = includesPartial(c.knownDomains, domain);
+            const isInNonDotGifDomains = includesPartial(c.nonDotGifDomains, domain);
             const isKnownDomain = isInKnownDomains || isInNonDotGifDomains;
 
             if (!isSelfPost && !nsfw && !isMp4) {
                 if ((isInKnownDomains && isGif) || isInNonDotGifDomains || isGif) {
-                    stats.onGif(url);
-                    stats.onSubreddit(subreddit);
+                    c.stats.onGif(url);
+                    c.stats.onSubreddit(subreddit);
                     if (isKnownDomain) {
-                        stats.onDomain(domain);
+                        c.stats.onDomain(domain);
                     } else {
-                        stats.onUnknownDomain(domain);
+                        c.stats.onUnknownDomain(domain);
                     }
                     if (!ignoredDomain && !ignoredSubreddit) {
                         sorted.push({
@@ -157,7 +154,7 @@ async function update() {
             }
         });
         let posts = sorted;
-        stats.onGifCount(posts.length);
+        c.stats.onGifCount(posts.length);
         posts = posts.concat(deferredPosts);
         deferredPosts = [];
 
@@ -177,14 +174,14 @@ async function update() {
                 try {
                     const gfycatLink = /^https?:\/\/gfycat.com/.test(link);
                     const mp4Bigger = post.mp4Save < 1;
-                    const templates = vars.replyTemplates;
+                    const templates = c.replyTemplates;
                     const allParts = templates.textParts;
                     const parts = Object.assign({}, allParts.default, allParts[post.subreddit]);
                     let reply = templates.baseReply.join('');
                     let content = '';
                     reply = reply.replace('{{type}}', post.uploaded ? 'mirror' : 'link')
                         .replace('{{mp4link}}', link)
-                        .replace('{{botversion}}', vars.botVersion);
+                        .replace('{{botversion}}', Config.botVersion);
 
                     if (!mp4Bigger) {
                         content = parts.sizetext;
@@ -216,20 +213,20 @@ async function update() {
                     }
                 } catch (e) {
                     if (e.toString().includes('403'))
-                        stats.onPossibleBanError(e, post.subreddit);
+                        c.stats.onPossibleBanError(e, post.subreddit);
                     else
-                        stats.onLoopError(e);
+                        c.stats.onLoopError(e);
                 }
             }
         }
 
     } catch (e) {
-        stats.onLoopError(e);
+        c.stats.onLoopError(e);
     }
 
-    if (!PROD || loops % vars.saveInterval === 0) {
-        stats.save();
-        cache.save();
+    if (!PROD || loops % c.saveInterval === 0) {
+        c.stats.save();
+        c.cache.save();
     }
 
 }
@@ -263,7 +260,7 @@ async function parsePost(post) {
         if (post.uploading || link) { // Currently uploading or already uploaded and passed to this loop
             skipToEnd = true;
         } else if (!post.uploaded && !link) {
-            cacheItem = cache.getCacheItem(gif);
+            cacheItem = c.cache.getCacheItem(gif);
             link = cacheItem ? cacheItem.mp4 : null;
         }
         if (!post.uploaded && link && link !== 'https://i.giphy.com.mp4' && !link.endsWith('..mp4')) { // Already cached (additional checks because of previous parsing bugs)
@@ -272,7 +269,7 @@ async function parsePost(post) {
             post.mp4Size = cacheItem.mp4Size;
             post.webmSize = cacheItem.webmSize;
             post.uploaded = cacheItem.uploaded;
-            stats.onCachedGif(gif, link);
+            c.stats.onCachedGif(gif, link);
             calculateSaves(post);
             return;
         }
@@ -309,7 +306,7 @@ async function parsePost(post) {
                 if (domain.includes('i.redd.it')) {
                     // defer loading posts from i.redd.it to avoid an issue where the 'preview' item isn't
                     // yet loaded in the post (probably takes time to process)
-                    if (!defer(post, gif, vars.redditMp4DeferCount)) {
+                    if (!defer(post, gif, c.redditMp4DeferCount)) {
                         prepareAndUploadPost(post);
                     }
                     return;
@@ -342,7 +339,7 @@ async function parsePost(post) {
             const mp4Check = await checkUrl(link, 'video/mp4', false);
             if (!mp4Check.success) {
                 // defer loading to give giphy/tumblr a bit of time to create an mp4
-                if (!defer(post, gif, vars.generalMp4DeferCount)) {
+                if (!defer(post, gif, c.generalMp4DeferCount)) {
                     prepareAndUploadPost(post);
                 }
                 return;
@@ -352,10 +349,10 @@ async function parsePost(post) {
         calculateSaves(post);
 
         post.mp4 = link;
-        cache.setCacheItem(post);
+        c.cache.setCacheItem(post);
 
     } catch (e) {
-        stats.onLoopError(e);
+        c.stats.onLoopError(e);
     }
 
 }
@@ -372,11 +369,11 @@ function defer(post, gif, count) {
     if (post.deferCount < count) {
         post.deferCount++;
         post.deferred = true;
-        stats.onDefer(gif);
+        c.stats.onDefer(gif);
         return true;
     }
     post.deferred = false;
-    stats.onDeferFail(gif);
+    c.stats.onDeferFail(gif);
     return false;
 }
 
@@ -462,21 +459,21 @@ async function uploadPost(post) {
         while (link === null) {
             const result = await gfycat.checkUploadStatus(uploadResult.gfyname);
             if (result.task === 'encoding') {
-                deasync.sleep(2000); // loop again after a delay
+                await delay(2000); // loop again after a delay
             } else if (result.task === 'complete') {
                 link = `https://gfycat.com/${result.gfyname}`;
             } else {
                 throw new Error(`Gfycat error: ${result.task}`);
             }
         }
-        stats.onUpload(gif, link);
+        c.stats.onUpload(gif, link);
         post.mp4 = link;
         if (link)
-            cache.setCacheItem(gif, link, true);
+            c.cache.setCacheItem(gif, link, true);
         post.uploading = false;
         post.uploaded = true;
     } catch (e) {
-        stats.onLoopError(e);
+        c.stats.onLoopError(e);
         post.uploading = false;
         post.uploaded = true;
         post.deferred = false;
@@ -506,7 +503,7 @@ async function checkUrl(url, filetype, checksize) {
         result.success = true;
         result.type = res.caseless.get('content-type');
         result.rightType = result.type === filetype;
-        result.aboveSizeThreshold = checksize ? result.size > vars.gifSizeThreshold : true;
+        result.aboveSizeThreshold = checksize ? result.size > c.gifSizeThreshold : true;
         if (!result.statusCodeOk) {
             result.success = false;
         } else if (filetype) {
@@ -517,7 +514,7 @@ async function checkUrl(url, filetype, checksize) {
             log(JSON.stringify(result));
         }
     } catch (e) {
-        stats.onLoopError(e);
+        c.stats.onLoopError(e);
     }
     return result;
 }
