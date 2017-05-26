@@ -113,7 +113,7 @@ async function update() {
             const ignoredSubreddit = c.ignoreSubreddits.includes(subreddit) ||
                 includesPartial(c.ignoreSubredditsPartial, subreddit);
             const isInKnownDomains = includesPartial(c.knownDomains, domain);
-            const isInNonDotGifDomains = includesPartial(c.nonDotGifDomains, domain);
+            const isInNonDotGifDomains = linkMatchesConfig(c.nonDotGifDomains, domain, url);
             const isKnownDomain = isInKnownDomains || isInNonDotGifDomains;
 
             if (!isSelfPost && !nsfw && !isMp4) {
@@ -549,6 +549,17 @@ function includesPartial(array, term) {
         const item = array[i];
         if (item.includes(term) || term.includes(item))
             return true;
+    }
+    return false;
+}
+
+function linkMatchesConfig(config, domain, link) {
+    for (const conf of Object.keys(config)) {
+        if (conf === domain) {
+            const regex = new RegExp(config[conf]);
+            if (regex.test(link))
+                return true;
+        }
     }
     return false;
 }

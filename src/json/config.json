@@ -58,9 +58,9 @@
     "j.gifs.com",
     "gifgif.io"
   ],
-  "nonDotGifDomains": [
-    "giphy.com"
-  ],
+  "nonDotGifDomains": {
+    "giphy.com": "https?:\\/\\/(www\\.)?giphy.com\\/gifs\\/.+"
+  },
   "ignoreDomains": [
     "imgur.com",
     "memecenter.com",
@@ -208,7 +208,9 @@
     "PuppyPorn",
     "Eyebleach",
     "americangods",
-    "TheLeftovers"
+    "TheLeftovers",
+    "MetagalacticBlitz",
+    "qotsa"
   ],
   "ignoreSubredditsPartial": [
     "nsfw",
