@@ -1,5 +1,8 @@
 const util = require('util');
 
 module.exports = (msg) => {
-    util.log(msg);
+    if (msg)
+        util.log(msg);
+    else // Empty line
+        console.log();
 };
