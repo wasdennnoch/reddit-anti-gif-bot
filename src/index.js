@@ -357,26 +357,6 @@ async function parsePost(post) {
 
 }
 
-function calculateSaves(post) {
-    post.mp4Save = (post.gifSize / post.mp4Size);
-    if (post.webmSize)
-        post.webmSave = (post.gifSize / post.webmSize);
-    if (!PROD) log(`Link stats: mp4 size: ${post.mp4Size} (webm: ${post.webmSize});
-         that is ${post.mp4Save} times smaller (webm: ${post.webmSave})`);
-}
-
-function defer(post, gif, count) {
-    if (post.deferCount < count) {
-        post.deferCount++;
-        post.deferred = true;
-        c.stats.onDefer(gif);
-        return true;
-    }
-    post.deferred = false;
-    c.stats.onDeferFail(gif);
-    return false;
-}
-
 function linkToGifLink(gif, domain) {
     let link = gif;
     if (domain.includes('giphy.com')) {
@@ -425,12 +405,43 @@ async function createMp4Link(post, gif, domain) {
     return link;
 }
 
-function prepareAndUploadPost(post) {
-    if (!post.uploading && !post.uploaded) {
-        post.deferred = true;
-        post.uploading = true;
-        uploadPost(post);
+async function checkUrl(url, filetype, checksize) {
+    const result = {
+        success: false,
+        size: -1,
+        statusCode: 0,
+        statusCodeOk: false,
+        type: null,
+        rightType: false,
+        aboveSizeThreshold: false
+    };
+    try {
+        const res = await request({
+            method: 'HEAD',
+            uri: url,
+            resolveWithFullResponse: true, // get full response instead of body
+            simple: false // don't throw on error code
+        });
+        result.statusCode = res.statusCode;
+        result.statusCodeOk = res.statusCode >= 200 && res.statusCode < 400;
+        result.size = res.caseless.get('content-length') || -1;
+        result.success = true;
+        result.type = res.caseless.get('content-type');
+        result.rightType = result.type === filetype;
+        result.aboveSizeThreshold = checksize ? result.size > c.gifSizeThreshold : true;
+        if (!result.statusCodeOk) {
+            result.success = false;
+        } else if (filetype) {
+            result.success = result.rightType && result.aboveSizeThreshold;
+        }
+        if (!PROD) {
+            log(`Checked ${url}`);
+            log(JSON.stringify(result));
+        }
+    } catch (e) {
+        c.stats.onLoopError(e);
     }
+    return result;
 }
 
 async function uploadPost(post) {
@@ -480,43 +491,24 @@ async function uploadPost(post) {
     }
 }
 
-async function checkUrl(url, filetype, checksize) {
-    const result = {
-        success: false,
-        size: -1,
-        statusCode: 0,
-        statusCodeOk: false,
-        type: null,
-        rightType: false,
-        aboveSizeThreshold: false
-    };
-    try {
-        const res = await request({
-            method: 'HEAD',
-            uri: url,
-            resolveWithFullResponse: true, // get full response instead of body
-            simple: false // don't throw on error code
-        });
-        result.statusCode = res.statusCode;
-        result.statusCodeOk = res.statusCode >= 200 && res.statusCode < 400;
-        result.size = res.caseless.get('content-length') || -1;
-        result.success = true;
-        result.type = res.caseless.get('content-type');
-        result.rightType = result.type === filetype;
-        result.aboveSizeThreshold = checksize ? result.size > c.gifSizeThreshold : true;
-        if (!result.statusCodeOk) {
-            result.success = false;
-        } else if (filetype) {
-            result.success = result.rightType && result.aboveSizeThreshold;
-        }
-        if (!PROD) {
-            log(`Checked ${url}`);
-            log(JSON.stringify(result));
-        }
-    } catch (e) {
-        c.stats.onLoopError(e);
+function defer(post, gif, count) {
+    if (post.deferCount < count) {
+        post.deferCount++;
+        post.deferred = true;
+        c.stats.onDefer(gif);
+        return true;
     }
-    return result;
+    post.deferred = false;
+    c.stats.onDeferFail(gif);
+    return false;
+}
+
+function prepareAndUploadPost(post) {
+    if (!post.uploading && !post.uploaded) {
+        post.deferred = true;
+        post.uploading = true;
+        uploadPost(post);
+    }
 }
 
 function getReadableFileSize(bytes) {
@@ -533,6 +525,14 @@ function getReadableFileSize(bytes) {
         bytes /= 1024;
     }
     return `${toFixedFixed(bytes)} ${sizes[i]}`;
+}
+
+function calculateSaves(post) {
+    post.mp4Save = (post.gifSize / post.mp4Size);
+    if (post.webmSize)
+        post.webmSave = (post.gifSize / post.webmSize);
+    if (!PROD) log(`Link stats: mp4 size: ${post.mp4Size} (webm: ${post.webmSize});
+         that is ${post.mp4Save} times smaller (webm: ${post.webmSave})`);
 }
 
 function toFixedFixed(num, decimals = 2) {
