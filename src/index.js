@@ -554,13 +554,10 @@ function includesPartial(array, term) {
 }
 
 function linkMatchesConfig(config, domain, link) {
-    for (const conf of Object.keys(config)) {
-        if (conf === domain) {
-            const regex = new RegExp(config[conf]);
-            if (regex.test(link))
-                return true;
-        }
-    }
+    const conf = config[domain];
+    if (conf)
+        if (new RegExp(conf).test(link))
+            return true;
     return false;
 }
 
