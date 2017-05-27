@@ -20,9 +20,10 @@ const reddit = new snoowrap({
     password: c.reddit.password
 });
 reddit.config({
-    retryErrorCodes: [], // Disable automatic retry to not spam reddit since we loop anyways,
+    retryErrorCodes: [], // Disable automatic retry to not spam reddit since we loop anyways
     maxRetryAttempts: 0, // Since the above thing doesn't seem to work
-    warnings: !PROD
+    warnings: !PROD,
+    requestTimeout: 15000
 });
 const gfycat = new Gfycat({
     clientId: c.gfycat.clientId,
