@@ -43,7 +43,7 @@ class LinkCache {
     }
 
     getCacheItem(gif) {
-        for (let i = 0; i < this.imageCache.length; i++) {
+        for (let i = this.imageCache.length - 1; i > 0; i--) {
             const item = this.imageCache[i];
             if (item.gif === gif) {
                 if (item.count === undefined)
