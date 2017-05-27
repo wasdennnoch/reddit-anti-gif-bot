@@ -39,9 +39,7 @@ class LinkCache {
             version: this.version,
             imageCache: this.imageCache
         };
-        fs.writeFile(this.path, JSON.stringify(json, null, 2), (e) => {
-            if (e) console.log(`[!]-- Error saving cache: ${e.toString()}`);
-        });
+        fs.writeFileSync(this.path, JSON.stringify(json, null, 2));
     }
 
     getCacheItem(gif) {

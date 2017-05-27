@@ -5,16 +5,20 @@ const fs = require('fs');
 const pkgReader = require('./package-reader');
 const Stats = require('./stats');
 const LinkCache = require('./link-cache');
+const log = require('./log');
+
 const PROD = process.env.PROD || false;
 
 class Config {
 
     constructor() {
         this.configPath = path.join(__dirname, '..', 'json', 'config.json');
+        this.newConfigPath = path.join(__dirname, '..', 'json', 'newconfig.json');
         this.cachePath = path.join(__dirname, '..', 'json', 'linkCache.json');
         this.statsPath = path.join(__dirname, '..', 'json', 'stats.json');
         this.secretPath = path.join(__dirname, '..', '..', '.secret');
         this.load();
+        setInterval(this.checkForUpdates.bind(this), 1000 * 60);
     }
 
     load() {
@@ -24,8 +28,20 @@ class Config {
 
     save() {
         fs.writeFile(this.configPath, JSON.stringify(this.config, null, 2), (e) => {
-            if (e) console.log(`[!]-- Error saving config: ${e.toString()}`);
+            if (e) log(`[!]-- Error saving config: ${e.toString()}`);
         });
+    }
+
+    checkForUpdates() {
+        if (fs.existsSync(this.newConfigPath)) {
+            log('New config detected, reloading.');
+            this.config = JSON.parse(fs.readFileSync(this.newConfigPath, 'utf8'));
+            this.save();
+            fs.unlinkSync(this.newConfigPath);
+            if (this.lkc)
+                this.lkc.save();
+            this.cache; // Reinit link cache in case the sizes changed
+        }
     }
 
     get reddit() {
