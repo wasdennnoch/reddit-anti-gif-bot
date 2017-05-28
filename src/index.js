@@ -10,10 +10,10 @@ const Config = require('./utils/config');
 const log = require('./utils/log');
 
 const c = new Config();
-const PROD = Config.PROD;
+const PROD = c.PROD;
 
 const reddit = new snoowrap({
-    userAgent: Config.userAgent,
+    userAgent: c.userAgent,
     clientId: c.reddit.clientId,
     clientSecret: c.reddit.clientSecret,
     username: c.reddit.username,
@@ -182,7 +182,7 @@ async function update() {
                     let content = '';
                     reply = reply.replace('{{type}}', post.uploaded ? 'mirror' : 'link')
                         .replace('{{mp4link}}', link)
-                        .replace('{{botversion}}', Config.botVersion);
+                        .replace('{{botversion}}', c.botVersion);
 
                     if (!mp4Bigger) {
                         content = parts.sizetext;

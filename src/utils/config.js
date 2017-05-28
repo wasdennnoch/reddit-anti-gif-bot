@@ -7,8 +7,6 @@ const Stats = require('./stats');
 const LinkCache = require('./link-cache');
 const log = require('./log');
 
-const PROD = process.env.PROD || false;
-
 class Config {
 
     constructor() {
@@ -17,6 +15,8 @@ class Config {
         this.cachePath = path.join(__dirname, '..', 'json', 'linkCache.json');
         this.statsPath = path.join(__dirname, '..', 'json', 'stats.json');
         this.secretPath = path.join(__dirname, '..', '..', '.secret');
+        this.prod = process.env.PROD || false;
+        log(`Production: ${this.PROD}`);
         this.load();
         setInterval(this.checkForUpdates.bind(this), 1000 * 60);
     }
@@ -120,16 +120,16 @@ class Config {
     }
 
 
-    static get userAgent() {
+    get userAgent() {
         return `bot:anti-gif-bot:${this.botVersion}`;
     }
 
-    static get botVersion() {
+    get botVersion() {
         return pkgReader.getVersion();
     }
 
-    static get PROD() {
-        return PROD;
+    get PROD() {
+        return this.prod;
     }
 
 }
