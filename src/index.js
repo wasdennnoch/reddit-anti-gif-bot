@@ -546,8 +546,9 @@ function replaceGifWithMp4(url) {
 }
 
 function includesPartial(array, term) {
+    term = term.toUpperCase();
     for (let i = 0; i < array.length; i++) {
-        const item = array[i];
+        const item = array[i].toUpperCase();
         if (item.includes(term) || term.includes(item))
             return true;
     }
@@ -557,7 +558,7 @@ function includesPartial(array, term) {
 function linkMatchesConfig(config, domain, link) {
     const conf = config[domain];
     if (conf)
-        if (new RegExp(conf).test(link))
+        if (new RegExp(conf, 'i').test(link))
             return true;
     return false;
 }
