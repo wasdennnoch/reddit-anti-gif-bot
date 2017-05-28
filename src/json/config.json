@@ -6,7 +6,6 @@
   "gifSizeThreshold": 1000000,
   "redditMp4DeferCount": 3,
   "generalMp4DeferCount": 10,
-  "replyTemplate": "[mp4 %%TYPE%%](%%MP4LINK%%)\n\n^(mp4s have a drastically smaller file size than gifs)\n\n---\n>*Beep, I'm a bot.* [POLL: rename bot?](https://np.reddit.com/r/anti_gif_bot/comments/6by4hg/poll_should_i_rename_the_bot/) | [source/info/feedback](https://github.com/wasdennnoch/reddit-anti-gif-bot) | [author](https://np.reddit.com/message/compose?to=MrWasdennnoch)",
   "replyTemplates": {
     "baseReply": [
       "[mp4 {{type}}]({{mp4link}})\n",
