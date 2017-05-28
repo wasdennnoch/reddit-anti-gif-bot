@@ -14,7 +14,7 @@
       "{{content}}\n",
       "\n",
       "---\n",
-      ">*Beep, I'm a bot.* [FAQ](https://np.reddit.com/r/anti_gif_bot/wiki/index) | [author](https://np.reddit.com/message/compose?to=MrWasdennnoch) | [source](https://github.com/wasdennnoch/reddit-anti-gif-bot) | v{{botversion}}"
+      "*Beep, I'm a bot.* [FAQ](https://np.reddit.com/r/anti_gif_bot/wiki/index) | [author](https://np.reddit.com/message/compose?to=MrWasdennnoch) | [source](https://github.com/wasdennnoch/reddit-anti-gif-bot) | v{{botversion}}"
     ],
     "textParts": {
       "default": {
