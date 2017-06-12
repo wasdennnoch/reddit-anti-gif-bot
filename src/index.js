@@ -533,7 +533,7 @@ function calculateSaves(post) {
     if (post.webmSize)
         post.webmSave = (post.gifSize / post.webmSize);
     if (!PROD) log(`Link stats: mp4 size: ${post.mp4Size} (webm: ${post.webmSize});
-         that is ${post.mp4Save} times smaller (webm: ${post.webmSave})`);
+         that is 1/${post.mp4Save} times (webm: ${post.webmSave})`);
 }
 
 function toFixedFixed(num, decimals = 2) {
