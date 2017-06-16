@@ -23,7 +23,7 @@ reddit.config({
     retryErrorCodes: [], // Disable automatic retry to not spam reddit since we loop anyways
     maxRetryAttempts: 0, // Since the above thing doesn't seem to work
     warnings: !PROD,
-    requestTimeout: 15000
+    requestTimeout: 14000
 });
 const gfycat = new Gfycat({
     clientId: c.gfycat.clientId,
@@ -522,7 +522,7 @@ function prepareAndUploadPost(post) {
 }
 
 function getReadableFileSize(bytes) {
-    // I'm waiting for Yottabyte-sized gifs
+    // I'm waiting for Andrebyte-sized gifs
     const sizes = ['Bytes', 'KB', 'MB', 'GB', 'TB', 'PB', 'EB (Exabyte)', 'ZB (Zettayte)',
         'YB (Yottabyte)', 'XB (Xenottabyte)', 'SB (Shilentnobyte)', 'DB (Domegemegrottebyte)',
         'IB (Icosebyte)', 'MB (Monoicosebyte)', 'DB (Diemuxbyte), AB (Andrebyte)',

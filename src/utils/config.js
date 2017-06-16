@@ -35,12 +35,17 @@ class Config {
     checkForUpdates() {
         if (fs.existsSync(this.newConfigPath)) {
             log('New config detected, reloading.');
-            this.config = JSON.parse(fs.readFileSync(this.newConfigPath, 'utf8'));
-            this.save();
-            fs.unlinkSync(this.newConfigPath);
-            if (this.lkc)
-                this.lkc.save();
-            this.cache; // Reinit link cache in case the sizes changed
+            try {
+                this.config = JSON.parse(fs.readFileSync(this.newConfigPath, 'utf8'));
+                this.save();
+                fs.unlinkSync(this.newConfigPath);
+                if (this.lkc)
+                    this.lkc.save();
+                this.cache; // Reinit link cache in case the sizes changed
+            } catch (e) {
+                log('An error occurred while loading the new config');
+                log(e);
+            }
         }
     }
 
