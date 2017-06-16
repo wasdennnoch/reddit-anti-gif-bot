@@ -185,7 +185,8 @@ async function update() {
                     const gfycatLink = /^https?:\/\/gfycat.com/.test(link);
                     const mp4Bigger = post.mp4Save < 0;
                     const canBeBigger = !post.uploaded && includesPartial(c.mp4CanBeBiggerDomains, post.domain);
-                    if (!canBeBigger) {
+                    if (mp4Bigger && !canBeBigger) {
+                        if (!PROD) log("mp4 is bigger but can't have a better quality!");
                         continue;
                     }
                     const templates = c.replyTemplates;
