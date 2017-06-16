@@ -55,9 +55,18 @@ module.exports.stop = () => {
 module.exports.start(); // I'll change the structure a bit in the future so I already extracted the start function
 
 
-// TODO Tenor has mp4s as well but only accessible via their API: https://www.tenor.co/gifapi
+// Tenor has mp4s as well but only accessible via their API: https://www.tenor.co/gifapi
 // Problem though: I don't know the gif ID which I need to request the info.
 // The direct gif links only contain the file SHA1 (?) which doesn't seem to be any useful.
+
+// Popkey as well: http://puu.sh/w3JPo/8ec106248b.png
+// For link https://popkey.co/m/MlvJx
+
+// https://frinkiac.com/gif/S10E20/745227/752901/
+// embedded link to gif https://frinkiac.com/gif/S10E20/745227/752901.gif?b64lines=
+// (so literally just replace the last / with .gif
+// redirects to https://frinkiac.com/video/S10E20/d3Y9aG6idWpCQcQmvInGxj0QQ7w=.gif
+// mp4 just replace https://frinkiac.com/video/S10E20/d3Y9aG6idWpCQcQmvInGxj0QQ7w=.mp4
 
 async function update() {
 

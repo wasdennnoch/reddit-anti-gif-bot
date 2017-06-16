@@ -107,7 +107,6 @@ class Stats {
     onPossibleBanError(e, sub) {
         const str = e.toString();
         log(`Possible ban error in '${sub}': ${str}`);
-        log(e);
         const saveString = `[${sub}]: ${str}`;
         if (!this.possibeBanErrors[saveString])
             this.possibeBanErrors[saveString] = 0;
