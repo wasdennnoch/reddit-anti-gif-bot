@@ -26,6 +26,7 @@ class LinkCache {
                 if (item.uploaded === false) item.uploaded = undefined;
             });
             this.save();
+            console.log('Upgrade done.');
         }
     }
 

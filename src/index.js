@@ -183,7 +183,11 @@ async function update() {
             } else if (link) {
                 try {
                     const gfycatLink = /^https?:\/\/gfycat.com/.test(link);
-                    const mp4Bigger = post.mp4Save < 1;
+                    const mp4Bigger = post.mp4Save < 0;
+                    const canBeBigger = !post.uploaded && includesPartial(c.mp4CanBeBiggerDomains, post.domain);
+                    if (!canBeBigger) {
+                        continue;
+                    }
                     const templates = c.replyTemplates;
                     const allParts = templates.textParts;
                     const parts = Object.assign({}, allParts.default, allParts[post.subreddit]);
@@ -342,7 +346,7 @@ async function parsePost(post) {
             });
             post.mp4Size = res.gfyItem.mp4Size;
             post.webmSize = res.gfyItem.webmSize;
-            if (!post.gifSize) {
+            if (post.gifSize === -1) {
                 post.gifSize = res.gfyItem.gifSize;
             }
         } else {
@@ -522,6 +526,7 @@ function prepareAndUploadPost(post) {
 }
 
 function getReadableFileSize(bytes) {
+    if (!bytes) return ''; // Will be ignored later anyways
     // I'm waiting for Andrebyte-sized gifs
     const sizes = ['Bytes', 'KB', 'MB', 'GB', 'TB', 'PB', 'EB (Exabyte)', 'ZB (Zettayte)',
         'YB (Yottabyte)', 'XB (Xenottabyte)', 'SB (Shilentnobyte)', 'DB (Domegemegrottebyte)',
@@ -538,12 +543,13 @@ function getReadableFileSize(bytes) {
 }
 
 function calculateSaves(post) {
-    post.mp4Save = (post.gifSize - post.mp4Size) / post.gifSize;
+    post.mp4Save = (post.gifSize - post.mp4Size) / post.gifSize * 100;
     if (post.webmSize)
-        post.webmSave = (post.gifSize - post.webmSize) / post.gifSize;
+        post.webmSave = (post.gifSize - post.webmSize) / post.gifSize * 100;
     if (!PROD) log(`Link stats: mp4 size: ${post.mp4Size} (webm: ${post.webmSize}); mp4save ${post.mp4Save}% (webmsave: ${post.webmSave}%)`);
 }
 
+// Since Numer.toFixed doesn't worlk like you would expect it to...
 function toFixedFixed(num, decimals = 2) {
     decimals = Math.pow(10, decimals);
     return Math.round(num * decimals) / decimals;

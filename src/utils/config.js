@@ -118,6 +118,10 @@ class Config {
         return this.config.ignoreDomains;
     }
 
+    get mp4CanBeBiggerDomains() {
+        return this.config.mp4CanBeBiggerDomains;
+    }
+
     get ignoreSubreddits() {
         return this.config.ignoreSubreddits;
     }

@@ -18,20 +18,20 @@
     ],
     "textParts": {
       "default": {
-        "sizetext": "This mp4 version is {{mp4sizecomp}} smaller than the gif ({{mp4size}} vs {{gifsize}}).  \n",
-        "webmsizetext": "The webm version is even {{webmsizecomp}} smaller ({{webmsize}}).  \n",
+        "sizetext": "This mp4 version is {{mp4sizecomp}}% smaller than the gif ({{mp4size}} vs {{gifsize}}).  \n",
+        "webmsizetext": "The webm version is even {{webmsizecomp}}% smaller ({{webmsize}}).  \n",
         "mp4biggertext": "This mp4 version is bigger than the gif (GIF: {{gifsize}}, MP4: {{mp4size}}) but it also (probably) has a higher quality and frame rate.  \n",
         "gfycatbiggertext": "Since it is hosted on gfycat the appropriate file format (mp4, webm, big, small) automatically gets chosen according to your specs.  \n"
       },
       "mildlyinfuriating": {
-        "sizetext": "This mp4 verion is {{mp4sizecomp}} smller than the gif ({{mp4size}} vs {{gifsize}}).  \n",
-        "webmsizetext": "The webm version is evn {{webmsizecomp}} smaler ({{webmsize}}).  \n",
+        "sizetext": "This mp4 verion is {{mp4sizecomp}}% smller than the gif ({{mp4size}} vs {{gifsize}}).  \n",
+        "webmsizetext": "The webm version is evn {{webmsizecomp}}% smaler ({{webmsize}}).  \n",
         "mp4biggertext": "This mp4 verion is bigger than the gif (GIF: {{gifsize}}, MP4: {{mp4size}}) but it also (prbably) has a higher quality and frme rate.  \n",
         "gfycatbiggertext": "Since it is hsted on gfycat the appropiate file format (mp4, webm, big, small) automatically gets chosen accordig to your specs.  \n"
       },
       "totallynotrobots": {
-        "sizetext": "THIS MP4 VERSION IS {{mp4sizecomp}} SMALLER THAN THE GIF ({{mp4size}} VS {{gifsize}}).  \n",
-        "webmsizetext": "THE WEBM VERSION IS EVEN {{webmsizecomp}} SMALLER ({{webmsize}}).  \n",
+        "sizetext": "THIS MP4 VERSION IS {{mp4sizecomp}}% SMALLER THAN THE GIF ({{mp4size}} VS {{gifsize}}).  \n",
+        "webmsizetext": "THE WEBM VERSION IS EVEN {{webmsizecomp}}% SMALLER ({{webmsize}}).  \n",
         "mp4biggertext": "THIS MP4 VERSION IS BIGGER THAN THE GIF (GIF: {{gifsize}}, MP4: {{mp4size}}) BUT IT ALSO (PROBABLY) HAS A HIGHER QUALITY AND FRAME RATE.  \n",
         "gfycatbiggertext": "SINCE IT IS HOSTED ON GFYCAT THE APPROPRIATE FILE FORMAT (MP4, WEBM, BIG, SMALL) AUTOMATICALLY GETS CHOSEN ACCORDING TO YOUR SPECS.  \n"
       },
@@ -39,8 +39,8 @@
         "bonusline": "bot save me?"
       },
       "PeopleFuckingDying": {
-        "sizetext": "THis mp4 VersIOn iS {{mp4sizecomp}} SMalLER tHAn THe gif ({{mp4size}} vS {{gifsize}}).  \n",
-        "webmsizetext": "THE WebM VeRSioN Is EVeN {{webmsizecomp}} SmALLeR ({{webmsize}}).  \n",
+        "sizetext": "THis mp4 VersIOn iS {{mp4sizecomp}}% SMalLER tHAn THe gif ({{mp4size}} vS {{gifsize}}).  \n",
+        "webmsizetext": "THE WebM VeRSioN Is EVeN {{webmsizecomp}}% SmALLeR ({{webmsize}}).  \n",
         "mp4biggertext": "thIs MP4 VeRSion IS bigger thAN tHE GIF (GIf: {{gifsize}}, mp4: {{mp4size}}) BUT iT aLso (prObabLy) haS A HIgheR QUALItY anD fraMe ratE.  \n",
         "gfycatbiggertext": "Since IT is HoSTeD oN gFyCaT tHe APproPRiAte FILe Format (mp4, WebM, biG, smALL) aUTomAtIcALLy Gets CHoseN AccoRDInG to your SPecs.  \n"
       }
@@ -67,6 +67,14 @@
     "memecdn.com",
     "wallgif.com",
     "redditmedia.com"
+  ],
+  "mp4CanBeBiggerDomains": [
+    "thumbs.gfycat.com",
+    "giant.gfycat.com",
+    "giphy.com",
+    "i.gyazo.com",
+    "media.tumblr.com",
+    "j.gifs.com"
   ],
   "ignoreSubreddits": [
     "menkissing",
