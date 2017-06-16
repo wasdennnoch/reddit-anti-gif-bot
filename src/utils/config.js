@@ -39,9 +39,11 @@ class Config {
                 this.config = JSON.parse(fs.readFileSync(this.newConfigPath, 'utf8'));
                 this.save();
                 fs.unlinkSync(this.newConfigPath);
-                if (this.lkc)
+                if (this.lkc) {
                     this.lkc.save();
-                this.cache; // Reinit link cache in case the sizes changed
+                    this.lkc = null;
+                    this.cache; // Reinit link cache in case the sizes changed
+                }
             } catch (e) {
                 log('An error occurred while loading the new config');
                 log(e);
