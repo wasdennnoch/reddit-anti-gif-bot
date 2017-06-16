@@ -457,7 +457,7 @@ async function checkUrl(url, filetype, checksize) {
 async function uploadPost(post) {
     if (!PROD) {
         const time = 5000 + Math.random() * 40000;
-        log(`waiting with fake upload for ${time}`);
+        log(`Waiting with fake upload for ${time}ms`);
         await delay(time);
         log(`Not uploading ${post.url}`);
         post.mp4 = 'https://gfycat.com/UncomfortablePleasedAnemoneshrimp';
@@ -538,11 +538,10 @@ function getReadableFileSize(bytes) {
 }
 
 function calculateSaves(post) {
-    post.mp4Save = (post.gifSize / post.mp4Size);
+    post.mp4Save = (post.gifSize - post.mp4Size) / post.gifSize;
     if (post.webmSize)
-        post.webmSave = (post.gifSize / post.webmSize);
-    if (!PROD) log(`Link stats: mp4 size: ${post.mp4Size} (webm: ${post.webmSize});
-         that is ${post.mp4Save} times smaller (webm: ${post.webmSave})`);
+        post.webmSave = (post.gifSize - post.webmSize) / post.gifSize;
+    if (!PROD) log(`Link stats: mp4 size: ${post.mp4Size} (webm: ${post.webmSize}); mp4save ${post.mp4Save}% (webmsave: ${post.webmSave}%)`);
 }
 
 function toFixedFixed(num, decimals = 2) {
