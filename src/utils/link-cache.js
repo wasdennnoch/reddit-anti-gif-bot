@@ -55,7 +55,7 @@ class LinkCache {
                     gif: item.gif,
                     mp4: item.mp4,
                     gifSize: item.gifSize,
-                    mp4size: item.mp4Size,
+                    mp4Size: item.mp4Size,
                     webmSize: item.webmSize,
                     uploaded: !!item.uploaded // convert undefined to boolean
                 };

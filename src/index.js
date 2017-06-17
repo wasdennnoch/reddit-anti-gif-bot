@@ -527,7 +527,6 @@ function prepareAndUploadPost(post) {
 }
 
 function getReadableFileSize(bytes) {
-    if (!bytes) return ''; // Will be ignored later anyways
     // I'm waiting for Andrebyte-sized gifs
     const sizes = ['Bytes', 'KB', 'MB', 'GB', 'TB', 'PB', 'EB (Exabyte)', 'ZB (Zettayte)',
         'YB (Yottabyte)', 'XB (Xenottabyte)', 'SB (Shilentnobyte)', 'DB (Domegemegrottebyte)',
