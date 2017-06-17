@@ -494,8 +494,6 @@ async function uploadPost(post) {
         }
         c.stats.onUpload(gif, link);
         post.mp4 = link;
-        if (link)
-            c.cache.addCacheItem(post);
         post.uploading = false;
         post.uploaded = true;
     } catch (e) {

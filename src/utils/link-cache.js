@@ -9,7 +9,7 @@ class LinkCache {
         this.stats = stats;
         this.maxSize = maxSize;
         this.purgeAmount = purgeAmount;
-        this.version = 6;
+        this.version = 7;
         this.load();
     }
 
@@ -22,8 +22,10 @@ class LinkCache {
         this.imageCache = json.imageCache;
         if (json.version < this.version) {
             console.log(`[LinkCache] Version difference detected (cache: ${json.version}, current ${this.version}), upgrading cache...`);
-            this.imageCache.forEach(item => {
-                if (item.uploaded === false) item.uploaded = undefined;
+            this.imageCache.forEach((item, index, arr) => {
+                if (item.mp4Size === null) {
+                    arr.splice(index, 1);
+                }
             });
             this.save();
             console.log('Upgrade done.');

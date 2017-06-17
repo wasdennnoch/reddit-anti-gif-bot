@@ -1,6 +1,6 @@
 {
   "name": "reddit-anti-gif-bot",
-  "version": "1.1.1",
+  "version": "1.1.2",
   "description": "A Reddit bot which provides mp4 links to gif submissions",
   "main": "src/index.js",
   "scripts": {
