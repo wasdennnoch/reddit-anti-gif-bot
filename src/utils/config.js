@@ -5,7 +5,6 @@ const fs = require('fs');
 const pkgReader = require('./package-reader');
 const Stats = require('./stats');
 const LinkCache = require('./link-cache');
-const log = require('./log');
 
 class Config {
 
@@ -16,7 +15,6 @@ class Config {
         this.statsPath = path.join(__dirname, '..', 'json', 'stats.json');
         this.secretPath = path.join(__dirname, '..', '..', '.secret');
         this.prod = process.env.PROD || false;
-        log(`Production: ${this.PROD}`);
         this.load();
         setInterval(this.checkForUpdates.bind(this), 1000 * 60);
     }
@@ -28,13 +26,13 @@ class Config {
 
     save() {
         fs.writeFile(this.configPath, JSON.stringify(this.config, null, 2), (e) => {
-            if (e) log(`[!]-- Error saving config: ${e.toString()}`);
+            if (e) logger.error('Error saving config', e);
         });
     }
 
     checkForUpdates() {
         if (fs.existsSync(this.newConfigPath)) {
-            log('New config detected, reloading.');
+            logger.infolog('New config detected, reloading.');
             try {
                 this.config = JSON.parse(fs.readFileSync(this.newConfigPath, 'utf8'));
                 this.save();
@@ -45,8 +43,7 @@ class Config {
                     this.cache; // Reinit link cache in case the sizes changed
                 }
             } catch (e) {
-                log('An error occurred while loading the new config');
-                log(e);
+                logger.error('An error occurred while loading the new config', e);
             }
         }
     }
@@ -61,7 +58,7 @@ class Config {
 
     get stats() {
         if (!this.sts) {
-            this.sts = new Stats(this.statsPath, this.PROD);
+            this.sts = new Stats(this.statsPath);
         }
         return this.sts;
     }
@@ -132,7 +129,7 @@ class Config {
 
 
     get userAgent() {
-        return `bot:anti-gif-bot:${this.botVersion}`;
+        return `bot:anti-gif-bot:${this.botVersion}:/u/MrWasdennnoch`;
     }
 
     get botVersion() {

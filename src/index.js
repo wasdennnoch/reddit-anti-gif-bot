@@ -4,11 +4,39 @@ const URL = require('url');
 const snoowrap = require('snoowrap');
 const Gfycat = require('gfycat-sdk');
 const request = require('request-promise-native');
+const winston = require('winston');
 const Config = require('./utils/config');
-const log = require('./utils/log');
+
+const PROD = process.env.PROD || false;
+
+global.logger = new winston.Logger({
+    level: 'silly',
+    transports: [new winston.transports.File({
+        name: 'main',
+        filename: 'main.log',
+        handleExceptions: true,
+        humanReadableUnhandledException: true,
+        level: 'info'
+    })],
+    exitOnError: false
+});
+if (!PROD) {
+    logger.add(winston.transports.Console, {
+        handleExceptions: true,
+        humanReadableUnhandledException: true,
+        json: false,
+        level: 'silly'
+    });
+}
+
+process.on('uncaughtException', e => {
+    logger.error('Uncaught exception', e);
+});
+process.on('unhandledRejection', e => {
+    logger.error('Uncaught exception', e);
+});
 
 const c = new Config();
-const PROD = c.PROD;
 
 const reddit = new snoowrap({
     userAgent: c.userAgent,
@@ -34,18 +62,19 @@ let lastPost = undefined;
 let loops = 0; // keep track of loops here to regulary persist stats/cache
 let deferredPosts = [];
 
-log('[anti-gif-bot] Ready.');
+logger.info(`Production: ${PROD}`);
+logger.info('Set up.');
 
 module.exports.start = () => {
     if (!loopInterval) {
-        log('[anti-gif-bot] Started.');
+        logger.info('Started.');
         loopInterval = setInterval(update, c.updateInterval);
         update();
     }
 };
 module.exports.stop = () => {
     if (loopInterval) {
-        log('[anti-gif-bot] Stopped.');
+        logger.info('Stopped.');
         clearInterval(loopInterval);
         loopInterval = null;
     }
@@ -87,10 +116,10 @@ async function update() {
      I will move the stats to a DB since they're just way too much for some JSON.
      Firebase looks good for that since it's not *that* much data (and it's free).
      */
-     
-     // TODO new gfycat link types: 
-     // https://thumbs.gfycat.com/UnfinishedContentCoyote-small.gif
-     // https://thumbs.gfycat.com/UnfinishedContentCoyote-max-14mb.gif
+
+    // TODO new gfycat link types:
+    // https://thumbs.gfycat.com/UnfinishedContentCoyote-small.gif
+    // https://thumbs.gfycat.com/UnfinishedContentCoyote-max-14mb.gif
 
     try {
 
@@ -106,7 +135,8 @@ async function update() {
         if (submissions.length > 0) {
             lastPost = submissions[0].name;
         } else {
-            throw new Error('No items returned by Reddit, skipping loop');
+            logger.warn('No items returned by Reddit, skipping loop');
+            return;
         }
         const sorted = [];
         submissions.forEach(post => {
@@ -160,7 +190,7 @@ async function update() {
                             webmSave: undefined
                         });
                     } else {
-                        if (!PROD) log(`Ignoring gif; ignored domain: ${ignoredDomain} (${domain}); ignored sureddit: ${ignoredSubreddit} (${subreddit})`);
+                        logger.debug(`Ignoring gif; ignored domain: ${ignoredDomain} (${domain}); ignored sureddit: ${ignoredSubreddit} (${subreddit})`);
                     }
                 }
             }
@@ -188,7 +218,7 @@ async function update() {
                     const mp4Bigger = post.mp4Save < 0;
                     const canBeBigger = !post.uploaded && includesPartial(c.mp4CanBeBiggerDomains, post.domain);
                     if (mp4Bigger && !canBeBigger) {
-                        if (!PROD) log("mp4 is bigger but can't have a better quality!");
+                        logger.debug("mp4 is bigger but can't have a better quality!");
                         continue;
                     }
                     const templates = c.replyTemplates;
@@ -226,7 +256,7 @@ async function update() {
                     if (PROD) {
                         await post.submission.reply(reply);
                     } else {
-                        log(reply);
+                        logger.debug(reply);
                     }
                 } catch (e) {
                     if (e.toString().includes('403'))
@@ -255,20 +285,20 @@ async function parsePost(post) {
         const domain = post.domain;
         const gif = post.gif;
         if (!PROD) {
-            log();
-            log(`Got post by: ${post.author} in ${post.subreddit}`);
-            log(`Url: ${post.url}`);
-            log(`Gif: ${post.gif}`);
-            log(`mp4: ${post.mp4}`);
-            log(`Deferred: ${post.deferred}`);
-            log(`Defer count: ${post.deferCount}`);
-            log(`Uploading: ${post.uploading}`);
-            log(`Uploaded: ${post.uploaded}`);
             const tempSubmission = post.submission;
             post.submission = undefined; // Don't log the huge submission object
-            log(JSON.stringify(post));
+            logger.debug(`
+Got post by: ${post.author} in ${post.subreddit}
+Url: ${post.url}
+Gif: ${post.gif}
+mp4: ${post.mp4}
+Deferred: ${post.deferred}
+Defer count: ${post.deferCount}
+Uploading: ${post.uploading}
+Uploaded: ${post.uploaded}
+${JSON.stringify(post)}
+`);
             post.submission = tempSubmission;
-            log();
         }
         let link = post.mp4;
         let skipToEnd = false;
@@ -292,7 +322,7 @@ async function parsePost(post) {
         }
         if (post.author === '[deleted]') {
             post.deferred = false;
-            if (!PROD) log('Ignoring post since it got deleted');
+            logger.debug('Ignoring post since it got deleted');
             return; // If post got deleted during deferral just ignore it
         }
 
@@ -305,14 +335,14 @@ async function parsePost(post) {
                 if (!gifCheck.success) {
                     if (gifCheck.statusCodeOk) { // Ignore if not found at all
                         if (!gifCheck.rightType) {
-                            if (!PROD) log(`Not a gif link: ${post.url}`);
+                            logger.debug(`Not a gif link: ${post.url}`);
                         } else if (gifCheck.size === -1) {
                             prepareAndUploadPost(post); // Size unknown; it's an unknown hoster anyways since others send a content-length
                         } else {
-                            if (!PROD) log(`Gif too small (and not deferred), skipping (size: ${gifCheck.size})`);
+                            logger.debug(`Gif too small (and not deferred), skipping (size: ${gifCheck.size})`);
                         }
                     } else {
-                        if (!PROD) log(`Not a working link, got status code ${gifCheck.statusCode}: ${post.url}`);
+                        logger.warn(`Not a working link, got status code ${gifCheck.statusCode}: ${post.url} ${post.url !== post.gif ? post.gif : ""}`);
                     }
                     return;
                 }
@@ -337,7 +367,7 @@ async function parsePost(post) {
         }
 
         if (!link) {
-            if (!PROD) log(`No link gotten for ${gif}`);
+            logger.debug(`No link gotten for ${gif}`);
             return;
         }
 
@@ -452,8 +482,8 @@ async function checkUrl(url, filetype, checksize) {
             result.success = result.rightType && result.aboveSizeThreshold;
         }
         if (!PROD) {
-            log(`Checked ${url}`);
-            log(JSON.stringify(result));
+            logger.debug(`Checked ${url}
+${JSON.stringify(result)}`);
         }
     } catch (e) {
         c.stats.onLoopError(e);
@@ -464,9 +494,9 @@ async function checkUrl(url, filetype, checksize) {
 async function uploadPost(post) {
     if (!PROD) {
         const time = 5000 + Math.random() * 40000;
-        log(`Waiting with fake upload for ${time}ms`);
+        logger.debug(`Waiting with fake upload for ${time}ms`);
         await delay(time);
-        log(`Not uploading ${post.url}`);
+        logger.debug(`Not uploading ${post.url}`);
         post.mp4 = 'https://gfycat.com/UncomfortablePleasedAnemoneshrimp';
         post.uploading = false;
         post.uploaded = true;
@@ -544,9 +574,10 @@ function getReadableFileSize(bytes) {
 
 function calculateSaves(post) {
     post.mp4Save = (post.gifSize - post.mp4Size) / post.gifSize * 100;
-    if (post.webmSize)
+    if (post.webmSize) {
         post.webmSave = (post.gifSize - post.webmSize) / post.gifSize * 100;
-    if (!PROD) log(`Link stats: mp4 size: ${post.mp4Size} (webm: ${post.webmSize}); mp4save ${post.mp4Save}% (webmsave: ${post.webmSave}%)`);
+    }
+    logger.debug(`Link stats: mp4 size: ${post.mp4Size} (webm: ${post.webmSize}); mp4save ${post.mp4Save}% (webmsave: ${post.webmSave}%)`);
 }
 
 // Since Numer.toFixed doesn't worlk like you would expect it to...

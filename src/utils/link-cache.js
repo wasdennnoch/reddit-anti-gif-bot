@@ -21,14 +21,14 @@ class LinkCache {
         Object.assign(json, JSON.parse(fs.readFileSync(this.path, {encoding: 'utf8'}) || '{}'));
         this.imageCache = json.imageCache;
         if (json.version < this.version) {
-            console.log(`[LinkCache] Version difference detected (cache: ${json.version}, current ${this.version}), upgrading cache...`);
+            logger.info(`[LinkCache] Version difference detected (cache: ${json.version}, current ${this.version}), upgrading cache...`);
             this.imageCache.forEach((item, index, arr) => {
                 if (item.mp4Size === null) {
                     arr.splice(index, 1);
                 }
             });
             this.save();
-            console.log('Upgrade done.');
+            logger.info('Upgrade done.');
         }
     }
 
