@@ -149,7 +149,7 @@ async function update() {
             const subreddit = post.subreddit.display_name;
             const domain = post.domain;
             const isSelfPost = domain.startsWith('self.');
-            const isGif = baseUrl.endsWith('.gif');
+            const isGif = baseUrl.endsWith('.gif') && !baseUrl.endsWith('/html5');
             const isMp4 = baseUrl.endsWith('.mp4');
             const ignoredDomain = includesPartial(c.ignoreDomains, domain);
             const ignoredSubreddit = c.ignoreSubreddits.includes(subreddit) ||
@@ -176,7 +176,7 @@ async function update() {
                             baseUrl: baseUrl,
                             url: url,
                             domain: domain,
-                            gif: linkToGifLink(baseUrl.endsWith('/') ? baseUrl.substring(0, url.length - 1) : baseUrl,
+                            gif: giphyLinkToDirectGifLink(baseUrl.endsWith('/') ? baseUrl.substring(0, url.length - 1) : baseUrl,
                                 domain), // Already convert html link to direct gif links (giphy)
                             mp4: undefined,
                             deferCount: 0,
@@ -406,9 +406,9 @@ ${JSON.stringify(post)}
 
 }
 
-function linkToGifLink(gif, domain) {
+function giphyLinkToDirectGifLink(gif, domain) {
     let link = gif;
-    if (domain.includes('giphy.com')) {
+    if (domain.endsWith('giphy.com')) {
         if (domain.startsWith('media')) {
             link = gif.substring(0, gif.lastIndexOf('/')).replace(/[a-z0-9]+(\.giphy.com\/media)/, 'i.giphy.com') + '.gif';
         } else if (!domain.startsWith('i.')) { // If it starts with 'i.' it's already the direct gif link
