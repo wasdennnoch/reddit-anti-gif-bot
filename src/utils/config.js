@@ -136,7 +136,7 @@ class Config {
     }
 
     get botVersion() {
-        return pkgReader.getVersion();
+        return pkgReader.version;
     }
 
     get PROD() {

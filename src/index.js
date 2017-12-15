@@ -1,7 +1,5 @@
 'use strict';
 
-const fs = require('fs');
-const path = require('path');
 const URL = require('url');
 const snoowrap = require('snoowrap');
 const Gfycat = require('gfycat-sdk');
@@ -89,6 +87,10 @@ async function update() {
      I will move the stats to a DB since they're just way too much for some JSON.
      Firebase looks good for that since it's not *that* much data (and it's free).
      */
+     
+     // TODO new gfycat link types: 
+     // https://thumbs.gfycat.com/UnfinishedContentCoyote-small.gif
+     // https://thumbs.gfycat.com/UnfinishedContentCoyote-max-14mb.gif
 
     try {
 
@@ -528,7 +530,7 @@ function getReadableFileSize(bytes) {
     // I'm waiting for Andrebyte-sized gifs
     const sizes = ['Bytes', 'KB', 'MB', 'GB', 'TB', 'PB', 'EB (Exabyte)', 'ZB (Zettayte)',
         'YB (Yottabyte)', 'XB (Xenottabyte)', 'SB (Shilentnobyte)', 'DB (Domegemegrottebyte)',
-        'IB (Icosebyte)', 'MB (Monoicosebyte)', 'DB (Diemuxbyte), AB (Andrebyte)',
+        'IB (Icosebyte)', 'MB (Monoicosebyte)', 'DB (Diemuxbyte)', 'AB (Andrebyte)',
         'mb (mbbyte. Not megabyte. The larger one. 1e+45 bytes.)'];
     // 1e45 is 2907354897182427562197295231552018137414565442749272241125960796722557152453591693304764202855054262243050086425064711734138406514458624 bytes.
     // 2.907.354.897.182.427.562.197.295.231.552.018.137.414.565.442.749.272.241.125.960.796.722.557.152.453.591.693.304.764.202.855.054.262.243.050.086.425.064.711.734.138.406.514.458.624 fucking bytes.
