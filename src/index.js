@@ -381,6 +381,8 @@ ${JSON.stringify(post)}
             post.webmSize = res.gfyItem.webmSize;
             if (post.gifSize === -1) {
                 post.gifSize = res.gfyItem.gifSize;
+                logger.debug(`Found gfycat mp4 link after original gif size is missing, setting gif size to ${post.gifSize} (RES: ${JSON.stringify(res)})`);
+                // TODO if the result of this is smaller than the size threshold don't post a reply
             }
         } else {
             const mp4Check = await checkUrl(link, 'video/mp4', false);
@@ -438,7 +440,7 @@ async function createMp4Link(post, gif, domain) {
 
     } else if (domain.includes('gfycat.com')) {
 
-        link = gif.replace(/(thumbs\.)|(giant\.)/, '').replace(/(-size_restricted)?(\.gif)$/, '');
+        link = gif.replace(/(thumbs\.)|(giant\.)/, '').replace(/(-size_restricted|-small|-max-14mb)?(\.gif)$/, '');
 
     } else if (domain.includes('i.redd.it')) {
 
@@ -471,7 +473,7 @@ async function checkUrl(url, filetype, checksize) {
         });
         result.statusCode = res.statusCode;
         result.statusCodeOk = res.statusCode >= 200 && res.statusCode < 400;
-        result.size = res.caseless.get('content-length') || -1;
+        result.size = res.caseless.get('content-length') || res.caseless.get('X-Archive-Orig-content-length') || -1;
         result.success = true;
         result.type = res.caseless.get('content-type');
         result.rightType = result.type === filetype;
