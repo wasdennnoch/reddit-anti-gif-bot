@@ -19,7 +19,7 @@ link gets posted. That's it basically. There are a few more things such as a dom
 (the gifv-bot already covers gifs from imgur) and an internal stats counter that keeps track
 of the amount of submissions the bot scraped, the amount of gifs, domains that host gifs etc.
 Maybe I'll eventually create a website where I make these stats available. Until then I'll
-keep them private (well, I accidentally commited a dev version once but whatever, it's no secret)
+keep them private (well, I accidentally committed a dev version once but whatever, it's no secret)
 to enhance the bot and for my own curiosity.
 
 ## Contribution
