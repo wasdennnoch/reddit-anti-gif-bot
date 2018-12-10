@@ -1,18 +1,40 @@
 {
   "name": "reddit-anti-gif-bot",
-  "version": "1.1.2",
+  "version": "2.0.0-dev",
   "description": "A Reddit bot which provides mp4 links to gif submissions",
   "main": "src/index.js",
   "scripts": {
-    "start": "node src/index.js"
+    "build": "rm -rf dist/ && tsc",
+    "watch": "rm -rf dist/ && tsc --watch",
+    "start": "node dist/index.js"
   },
   "author": "MrWasdennnoch",
-  "repository": "https://github.com/wasdennnoch/reddit-anti-gif-bot",
+  "repository": {
+    "url": "https://github.com/wasdennnoch/reddit-anti-gif-bot"
+  },
+  "bugs": {
+    "url": "https://github.com/wasdennnoch/reddit-anti-gif-bot/issues"
+  },
+  "engines": {
+    "node": "10.10.x",
+    "npm": "6.4.x"
+  },
   "dependencies": {
-    "gfycat-sdk": "^1.4.10",
-    "request": "^2.83.0",
-    "request-promise-native": "^1.0.5",
-    "snoowrap": "^1.15.1",
-    "winston": "^2.4.0"
+    "chainfetch": "^1.2.0",
+    "dotenv": "^6.2.0",
+    "fs-extra": "^7.0.1",
+    "gfycat-sdk": "^1.4.18",
+    "ioredis": "^4.3.0",
+    "snoowrap": "^1.15.2",
+    "winston": "^2.4.4"
+  },
+  "devDependencies": {
+    "@types/fs-extra": "^5.0.4",
+    "@types/ioredis": "^4.0.4",
+    "@types/node": "^10.12.12",
+    "@types/node-fetch": "^2.1.4",
+    "@types/snoowrap": "^1.16.1",
+    "tslint": "^5.11.0",
+    "typescript": "^3.2.2"
   }
 }

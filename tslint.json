@@ -1,0 +1,17 @@
+{
+    "defaultSeverity": "error",
+    "extends": [
+        "tslint:recommended" // https://github.com/palantir/tslint/blob/master/src/configs/recommended.ts
+    ],
+    "jsRules": {},
+    "rules": {
+        "arrow-parens": [true, "ban-single-arg-parens"],
+        "interface-name": false,
+        "max-line-length": [true, 150],
+        "member-ordering": false,
+        "no-bitwise": false,
+        "no-empty": [true, "allow-empty-functions"],
+        "object-literal-sort-keys": false
+    },
+    "rulesDirectory": []
+}
