@@ -29,6 +29,7 @@ export default abstract class IngestSource {
     protected commentCallback?: CommentCallback;
     protected inboxCallback?: InboxCallback;
 
+    // Me trying to hack together constructors with different params even though JS only has one constructor
     protected constructor(opts: SourceOptions | any)
     protected constructor(sourceName: string, capabilities: Capabilities[])
     protected constructor(sourceName: string = "ERR", capabilities: Capabilities[] = []) {

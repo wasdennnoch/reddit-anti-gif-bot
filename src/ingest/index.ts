@@ -51,12 +51,14 @@ export default class Ingest {
         await this.setIngestSourceOrder(this.initialSourceOrder);
     }
 
+    // TODO What about an option to only fetch specific capabilities from specific sources even if they support more?
+    // For example, let the pushshift source only fetch comments but leave submissions up to snoowrap.
     public async setIngestSourceOrder(sourceOrder: string[]) {
-        if (this.ingesting) {
-            throw new Error("Can't set ingest source order with ingest running");
-        }
-        if (this.currentSourceOrder + "" === sourceOrder + "") { // It works ¯\_(ツ)_/¯
+        if (!sourceOrder.length || this.currentSourceOrder + "" === sourceOrder + "") { // It works ¯\_(ツ)_/¯
             return;
+        }
+        if (this.ingesting) {
+            await this.stopIngest();
         }
         let totalCapabilities = 0;
         const finalSourceList: IngestSource[] = [];

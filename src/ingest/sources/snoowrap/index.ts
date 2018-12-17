@@ -15,6 +15,9 @@ export interface SnoowrapIngestOptions {
 // https://not-an-aardvark.github.io/snoowrap/snoowrap.html
 // https://www.reddit.com/dev/api/
 
+// TODO:
+// - Exponential backoff
+
 export default class SnoowrapIngest extends IngestSource {
 
     private snoo: Snoowrap;
@@ -26,7 +29,8 @@ export default class SnoowrapIngest extends IngestSource {
     private inboxTimeout?: NodeJS.Timeout;
     private lastSubmissionId?: string;
     private lastCommentId?: string;
-    private lastInboxId?: string;
+
+    private zeroResultCommentFetches: number = 0;
 
     protected constructor({
         snoowrapInstance = SnoowrapIngest._createSnoowrapInstance(),
@@ -41,6 +45,10 @@ export default class SnoowrapIngest extends IngestSource {
         this.submissionFetchIntervalTime = submissions;
         this.commentFetchIntervalTime = comments;
         this.inboxFetchIntervalTime = inbox;
+
+        this._loadSubmissions = this._loadSubmissions.bind(this);
+        this._loadComments = this._loadComments.bind(this);
+        this._loadInbox = this._loadInbox.bind(this);
     }
 
     public async init() { }
@@ -52,8 +60,7 @@ export default class SnoowrapIngest extends IngestSource {
             // This is apparently supposed to have heavy rate limiting, I have not noticed that yet.
             await this.snoo.readAllMessages();
         } catch (e) {
-            // tslint:disable-next-line:no-console
-            console.log(e);
+            console.log(e); // tslint:disable-line no-console
         }
         await Promise.all([
             this._loadSubmissions(),
@@ -75,6 +82,7 @@ export default class SnoowrapIngest extends IngestSource {
     }
 
     private async _loadSubmissions() {
+        const startTime = Date.now();
         if (this.submissionCallback) {
             try {
                 const submissions = await this.snoo.getNew("all", {
@@ -84,60 +92,71 @@ export default class SnoowrapIngest extends IngestSource {
                 });
                 if (submissions.length) {
                     this.lastSubmissionId = submissions[0].name;
-                }
-                for (const s of submissions.reverse()) {
-                    this.submissionCallback(s);
+                    for (const s of submissions.reverse()) {
+                        this.submissionCallback(s);
+                    }
+                } else {
+                    console.log("Got zero submissions"); // tslint:disable-line no-console
                 }
             } catch (e) {
-                // tslint:disable-next-line:no-console
-                console.log(e);
+                console.log(e); // tslint:disable-line no-console
             }
         }
-        this.submissionTimeout = setTimeout(this._loadSubmissions.bind(this), this.submissionFetchIntervalTime);
+        this.submissionTimeout = setTimeout(this._loadSubmissions,
+            Math.max(this.submissionFetchIntervalTime / 2, this.submissionFetchIntervalTime - (Date.now() - startTime)));
     }
 
     private async _loadComments() {
+        const startTime = Date.now();
         if (this.commentCallback) {
             try {
                 const comments = await this.snoo.getNewComments("all", {
                     limit: 100,
-                    before: this.lastCommentId || undefined, // TODO Does reddit support that here or do I have to mange that myself
+                    before: this.lastCommentId || undefined,
+                    // NOTE: The above makes reddit return 0 comments when the ID is too far behind (1000 items I assume)
                 });
                 if (comments.length) {
                     this.lastCommentId = comments[0].name;
-                }
-                for (const c of comments.reverse()) {
-                    this.commentCallback(c);
+                    for (const c of comments.reverse()) {
+                        this.commentCallback(c);
+                    }
+                } else {
+                    console.log("Got zero comments"); // tslint:disable-line no-console
+                    this.zeroResultCommentFetches++;
+                    if (this.zeroResultCommentFetches > 4 && this.lastCommentId) {
+                        console.log("Got too many zero result comment fetches, resetting last comment ID"); // tslint:disable-line no-console
+                        this.zeroResultCommentFetches = 0;
+                        this.lastCommentId = undefined;
+                    }
                 }
             } catch (e) {
-                // tslint:disable-next-line:no-console
-                console.log(e);
+                console.log(e); // tslint:disable-line no-console
             }
         }
-        this.commentTimeout = setTimeout(this._loadComments.bind(this), this.commentFetchIntervalTime);
+        this.commentTimeout = setTimeout(this._loadComments,
+            Math.max(this.commentFetchIntervalTime / 2, this.commentFetchIntervalTime - (Date.now() - startTime)));
     }
 
     private async _loadInbox() {
+        const startTime = Date.now();
         if (this.inboxCallback) {
             try {
                 const inbox = await this.snoo.getUnreadMessages({
                     limit: 100,
                     show: "all",
-                    // before: this.lastInboxId || undefined, // TODO Use this or just fetch all (all are being marked as read on ingest start anways)
-                } as any); // Gotta love incorrect types
+                });
                 if (inbox.length) {
-                    // this.lastInboxId = inbox[0].name; // TODO not returning anything new after first run
                     await this.snoo.markMessagesAsRead(inbox.map(m => m.name));
-                }
-                for (const i of inbox.reverse()) {
-                    this.inboxCallback(i);
+                    for (const i of inbox.reverse()) {
+                        this.inboxCallback(i);
+                    }
                 }
             } catch (e) {
-                // tslint:disable-next-line:no-console
-                console.log(e);
+                console.log(e); // tslint:disable-line no-console
             }
         }
-        this.inboxTimeout = setTimeout(this._loadInbox.bind(this), this.inboxFetchIntervalTime);
+        this.inboxTimeout = setTimeout(this._loadInbox,
+            Math.max(this.inboxFetchIntervalTime / 2, this.inboxFetchIntervalTime - (Date.now() - startTime)));
     }
 
     private static _createSnoowrapInstance(): Snoowrap {
@@ -149,9 +168,9 @@ export default class SnoowrapIngest extends IngestSource {
             password: process.env.REDDIT_PASSWORD,
         });
         s.config({
-            requestTimeout: 15000,
+            requestTimeout: 4000,
             continueAfterRatelimitError: false,
-            retryErrorCodes: [999], // TODO does that fix the crashes I experienced before?
+            retryErrorCodes: [999], // TODO Does that fix the crashes I experienced before?
             maxRetryAttempts: 0,
             warnings: process.env.NODE_ENV !== "production",
             debug: process.env.NODE_ENV !== "production",
