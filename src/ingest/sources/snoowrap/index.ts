@@ -17,6 +17,7 @@ export interface SnoowrapIngestOptions {
 
 // TODO:
 // - Exponential backoff
+// - Crash at https://github.com/not-an-aardvark/snoowrap/blob/443583c97b8754c559112ee5fe4abfa8c46ad8cc/src/request_handler.js#L78
 
 export default class SnoowrapIngest extends IngestSource {
 
@@ -33,7 +34,7 @@ export default class SnoowrapIngest extends IngestSource {
     private zeroResultCommentFetches: number = 0;
 
     protected constructor({
-        snoowrapInstance = SnoowrapIngest._createSnoowrapInstance(),
+        snoowrapInstance = SnoowrapIngest.createSnoowrapInstance(),
         fetchIntervals: {
             submissions = 15000,
             comments = 1500,
@@ -46,9 +47,9 @@ export default class SnoowrapIngest extends IngestSource {
         this.commentFetchIntervalTime = comments;
         this.inboxFetchIntervalTime = inbox;
 
-        this._loadSubmissions = this._loadSubmissions.bind(this);
-        this._loadComments = this._loadComments.bind(this);
-        this._loadInbox = this._loadInbox.bind(this);
+        this.loadSubmissions = this.loadSubmissions.bind(this);
+        this.loadComments = this.loadComments.bind(this);
+        this.loadInbox = this.loadInbox.bind(this);
     }
 
     public async init() { }
@@ -63,13 +64,14 @@ export default class SnoowrapIngest extends IngestSource {
             console.log(e); // tslint:disable-line no-console
         }
         await Promise.all([
-            this._loadSubmissions(),
-            this._loadComments(),
-            this._loadInbox(),
+            this.loadSubmissions(),
+            this.loadComments(),
+            this.loadInbox(),
         ]);
     }
 
     public async stop() {
+        // TODO If one of these is running at the moment... it will still queue itself again
         if (this.submissionTimeout) {
             clearTimeout(this.submissionTimeout);
         }
@@ -81,7 +83,7 @@ export default class SnoowrapIngest extends IngestSource {
         }
     }
 
-    private async _loadSubmissions() {
+    private async loadSubmissions() {
         const startTime = Date.now();
         if (this.submissionCallback) {
             try {
@@ -102,11 +104,11 @@ export default class SnoowrapIngest extends IngestSource {
                 console.log(e); // tslint:disable-line no-console
             }
         }
-        this.submissionTimeout = setTimeout(this._loadSubmissions,
+        this.submissionTimeout = setTimeout(this.loadSubmissions,
             Math.max(this.submissionFetchIntervalTime / 2, this.submissionFetchIntervalTime - (Date.now() - startTime)));
     }
 
-    private async _loadComments() {
+    private async loadComments() {
         const startTime = Date.now();
         if (this.commentCallback) {
             try {
@@ -133,11 +135,11 @@ export default class SnoowrapIngest extends IngestSource {
                 console.log(e); // tslint:disable-line no-console
             }
         }
-        this.commentTimeout = setTimeout(this._loadComments,
+        this.commentTimeout = setTimeout(this.loadComments,
             Math.max(this.commentFetchIntervalTime / 2, this.commentFetchIntervalTime - (Date.now() - startTime)));
     }
 
-    private async _loadInbox() {
+    private async loadInbox() {
         const startTime = Date.now();
         if (this.inboxCallback) {
             try {
@@ -155,11 +157,11 @@ export default class SnoowrapIngest extends IngestSource {
                 console.log(e); // tslint:disable-line no-console
             }
         }
-        this.inboxTimeout = setTimeout(this._loadInbox,
+        this.inboxTimeout = setTimeout(this.loadInbox,
             Math.max(this.inboxFetchIntervalTime / 2, this.inboxFetchIntervalTime - (Date.now() - startTime)));
     }
 
-    private static _createSnoowrapInstance(): Snoowrap {
+    private static createSnoowrapInstance(): Snoowrap {
         const s = new Snoowrap({
             userAgent: `bot:anti-gif-bot:${botVersion} (by /u/MrWasdennnoch)`,
             clientId: process.env.REDDIT_CLIENT_ID,

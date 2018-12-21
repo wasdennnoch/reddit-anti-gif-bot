@@ -126,7 +126,7 @@ interface ReplyTemplate {
 // TODO figure out how to load/manage/reload the config
 /* Config entries:
 - Snoowrap update intervals?
-- redditMp4DeferCount/generalMp4DeferCount -> I don't have fixed loop intervals anymore, also have to include defer delay (per defer)
+- redditMp4DeferCount/generalMp4DeferCount -> I don't have fixed loop intervals anymore, also have to include defer delay (per defer), call it "count"
 - mp4CanBeBiggerDomains/nonDotGifDomains/knownDomains
 */
 // Maybe somehow set up more easily customizable post filters? Apart from NSFW.
@@ -167,7 +167,7 @@ export default class Database {
 
     public async init() {
         await this.db.connect();
-        await this._fetchConfig();
+        await this.fetchConfig();
     }
 
     public getIngestSourceOrder(): string[] {
@@ -311,7 +311,7 @@ export default class Database {
         }
     }
 
-    private async _fetchConfig() {
+    private async fetchConfig() {
         const [
             ingestSourceOrder,
             gifSizeThreshold,

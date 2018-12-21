@@ -20,21 +20,23 @@
     "npm": "6.4.x"
   },
   "dependencies": {
-    "chainfetch": "^1.2.0",
+    "chainfetch": "^1.2.2",
     "dotenv": "^6.2.0",
     "fs-extra": "^7.0.1",
     "gfycat-sdk": "^1.4.18",
     "ioredis": "^4.3.0",
+    "node-fetch": "^2.3.0",
     "snoowrap": "^1.15.2",
+    "tldts": "^3.1.2",
     "winston": "^2.4.4"
   },
   "devDependencies": {
     "@types/fs-extra": "^5.0.4",
     "@types/ioredis": "^4.0.4",
-    "@types/node": "^10.12.12",
+    "@types/node": "^10.12.18",
     "@types/node-fetch": "^2.1.4",
     "@types/snoowrap": "^1.16.1",
-    "tslint": "^5.11.0",
+    "tslint": "^5.12.0",
     "typescript": "^3.2.2"
   }
 }

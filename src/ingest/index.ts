@@ -47,7 +47,7 @@ export default class Ingest {
     }
 
     public async init() {
-        await this._readAvailableSources();
+        await this.readAvailableSources();
         await this.setIngestSourceOrder(this.initialSourceOrder);
     }
 
@@ -78,7 +78,7 @@ export default class Ingest {
             throw new Error(`Source list '${sourceOrder}' does not cover all capabilities ` +
                 `(got '${capabilitiesToNames(totalCapabilities)}', required are '${capabilitiesToNames(AllCapabilitiesBitfield)}')`);
         }
-        await this._destroyIngest();
+        await this.destroyIngestInternal();
         for (const src of finalSourceList) {
             await src.init();
         }
@@ -116,7 +116,7 @@ export default class Ingest {
         if (this.destroyed) {
             throw new Error("Ingest already destroyed");
         }
-        await this._destroyIngest();
+        await this.destroyIngestInternal();
         this.destroyed = true;
     }
 
@@ -151,7 +151,7 @@ export default class Ingest {
         }
     }
 
-    private async _readAvailableSources() {
+    private async readAvailableSources() {
         const dir = `${__dirname}/sources/`;
         // Lovely outdated type fixes incoming
         const sources = (await (readdir(dir, { withFileTypes: true } as any) as any as Promise<Dirent[]>)).filter(f => f.isDirectory());
@@ -160,7 +160,7 @@ export default class Ingest {
         }
     }
 
-    private async _destroyIngest() {
+    private async destroyIngestInternal() {
         this.setSubmissionCallback(undefined);
         this.setCommentCallback(undefined);
         this.setInboxCallback(undefined);
