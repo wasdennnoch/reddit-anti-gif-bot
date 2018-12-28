@@ -8,12 +8,12 @@ export const delay = (ms: number): Promise<void> => {
     return new Promise(r => setTimeout(r, ms));
 };
 
-export const getReadableFileSize = (bytes?: number): string => {
-    if (bytes === undefined) {
+export const getReadableFileSize = (bytes: number | null | undefined): string => {
+    if (bytes === null || bytes === undefined) {
         return "";
     }
     let i = 0;
-    while (bytes > 1024 && i < byteSizeUnits.length - 1) {
+    while (bytes >= 1000 && i < byteSizeUnits.length - 1) {
         i++;
         bytes /= 1024;
     }

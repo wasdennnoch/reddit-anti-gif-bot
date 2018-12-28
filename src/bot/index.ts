@@ -1,22 +1,26 @@
 import fetch from "chainfetch";
 import Gfycat = require("gfycat-sdk");
 import { Comment, PrivateMessage, Submission } from "snoowrap";
-import Database, { ExceptionTypes, GifCacheItem } from "../db";
+import Database, { ExceptionSources, ExceptionTypes } from "../db";
+import Tracker, { ItemTypes, TrackingErrorDetails, TrackingItemErrorCodes, TrackingStatus } from "../db/tracker";
+import Logger from "../logger";
 import { delay, getReadableFileSize, toFixedFixed, version } from "../utils";
 import URL2 from "./url2";
 
 // TODO support https://thumbs.gfycat.com/CraftyMilkyHadrosaurus.webp
+// Add note when mp4 may have sound
+// Add note when gif was persistenly saved from temp host (*.ezgif.com)
 export default class AntiGifBot {
 
-    private db: Database;
-    private gfycat: Gfycat;
+    private static readonly TAG = "AntiGifBot";
+
+    private readonly gfycat: Gfycat;
     private submissionQueue: Submission[];
     private commentQueue: Comment[];
     private inboxQueue: PrivateMessage[];
-    private loopImmediate?: NodeJS.Immediate;
+    private loopTimeout?: NodeJS.Timeout;
 
-    constructor(db: Database) {
-        this.db = db;
+    constructor(readonly db: Database) {
         this.submissionQueue = [];
         this.commentQueue = [];
         this.inboxQueue = [];
@@ -32,9 +36,7 @@ export default class AntiGifBot {
         }
     }
 
-    public async init() { }
-
-    public startProcessing() {
+    public async init() {
         this.queueLoop();
     }
 
@@ -51,132 +53,207 @@ export default class AntiGifBot {
     }
 
     private async loop() {
-        this.loopImmediate = undefined;
+        this.loopTimeout = undefined;
         try {
-            const submissionPromises = this.submissionQueue.map(s => this.processSubmission(s));
-            const commentPromises = this.commentQueue.map(s => this.processComment(s));
-            const inboxPromises = this.inboxQueue.map(s => this.processInbox(s));
+            this.submissionQueue.forEach(i => this.processSubmission(i));
+            this.commentQueue.forEach(i => this.processComment(i));
+            this.inboxQueue.forEach(i => this.processInbox(i));
             this.submissionQueue = [];
             this.commentQueue = [];
             this.inboxQueue = [];
-            // TODO Await or not?
-            await Promise.all([
-                ...submissionPromises,
-                ...commentPromises,
-                ...inboxPromises,
-            ]);
         } catch (e) {
-            console.log(e); // tslint:disable-line no-console
+            Logger.error(AntiGifBot.TAG, "Unexpected error while processing new data in loop", e);
         }
         this.queueLoop();
     }
 
     private queueLoop() {
-        if (!this.loopImmediate) {
-            this.loopImmediate = setImmediate(this.loop);
+        if (!this.loopTimeout) {
+            this.loopTimeout = setTimeout(this.loop, 5);
         }
     }
 
+    // TODO Split up into smaller functions
     private async processSubmission(submission: Submission) {
         try {
-            if (submission.is_self || submission.over_18 || submission.locked || submission.quarantine) {
-                return;
+            let url;
+            try {
+                url = new URL2(submission.url);
+            } catch {
+                return; // gg
             }
-            const url = new URL2(submission.url);
-            if (!this.shouldHandleUrl(url)) {
-                return;
+            const subreddit = submission.subreddit.display_name;
+            const tracker = Tracker.trackNewItem(ItemTypes.SUBMISSION, url, submission.id, subreddit, new Date(submission.created_utc * 1000));
+            Tracker.trackNewIncomingItem(ItemTypes.SUBMISSION, subreddit);
+            if (submission.is_self || submission.over_18 || submission.locked || submission.quarantine || !this.shouldHandleUrl(url)) {
+                return tracker.abortTracking();
             }
+            Tracker.trackNewIncomingGif(ItemTypes.SUBMISSION, url.hostname);
             const [
                 isSubredditException,
                 isDomainException,
                 isUserException,
             ] = await Promise.all([
-                this.db.isException(ExceptionTypes.SUBREDDIT, submission.subreddit.display_name),
+                this.db.isException(ExceptionTypes.SUBREDDIT, subreddit),
                 this.db.isException(ExceptionTypes.DOMAIN, url.domain),
                 this.db.isException(ExceptionTypes.USER, submission.author.name), // TODO for posts as well?
             ]);
+            Logger.debug(AntiGifBot.TAG, `[${submission.id}] -> Identified as GIF link | Subreddit: ${subreddit} | Link: ${url.href}`);
             if (isSubredditException || isDomainException || isUserException) {
-                return;
+                return tracker.endTracking(TrackingStatus.IGNORED); // TODO Still need to track sizes, if not domain exception?
             }
 
             let itemData = await this.db.getCachedLink(url.href);
             if (!itemData) {
+                tracker.updateData({
+                    fromCache: false,
+                });
                 const gifUrl = await this.toActualGifUrl(url);
 
+                Logger.debug(AntiGifBot.TAG, `[${submission.id}] Checking GIF link ${gifUrl.href}`);
                 // TODO would also make sense to cache that a link should not be fetched again?
                 const gifData = await this.checkUrl(gifUrl, "image/gif");
                 if (gifData.error) {
-                    return console.log(submission.id, `Unexpected error from gif status fetch`, gifData.error); // tslint:disable-line no-console
+                    Logger.warn(AntiGifBot.TAG, `[${submission.id}] Unexpected error from GIF fetch status`, gifData.error);
+                    return tracker.endTracking(TrackingStatus.ERROR, {
+                        errorCode: TrackingItemErrorCodes.HEAD_FAILED_GIF,
+                        errorDetail: TrackingErrorDetails.CONNECTION_ERROR,
+                        errorExtra: gifData.error.stack,
+                    });
                 }
                 if (!gifData.statusOk) {
-                    return console.log(submission.id, `Unexpected gif status ${gifData.statusCode} ${gifData.statusText}`); // tslint:disable-line no-console max-line-length
+                    Logger.warn(AntiGifBot.TAG, `[${submission.id}] Unexpected GIF status ${gifData.statusCode} ${gifData.statusText}`);
+                    return tracker.endTracking(TrackingStatus.ERROR, {
+                        errorCode: TrackingItemErrorCodes.HEAD_FAILED_GIF,
+                        errorDetail: TrackingErrorDetails.STATUS_CODE,
+                        errorExtra: `${gifData.statusCode} ${gifData.statusText}`,
+                    });
                 }
                 if (!gifData.expectedType) {
-                    return console.log(submission.id, `Unexpected gif content type ${gifData.contentType}`); // tslint:disable-line no-console
+                    Logger.warn(AntiGifBot.TAG, `[${submission.id}] Unexpected GIF content type ${gifData.contentType}`);
+                    return tracker.endTracking(TrackingStatus.ERROR, {
+                        errorCode: TrackingItemErrorCodes.HEAD_FAILED_GIF,
+                        errorDetail: TrackingErrorDetails.CONTENT_TYPE,
+                        errorExtra: `${gifData.contentType}`,
+                    });
                 }
                 // TODO Try to download when it is null?
-                if (gifData.contentLength !== null && gifData.contentLength < this.db.getGifSizeThreshold()) {
-                    return console.log(submission.id, `Gif Content length too small with ${gifData.contentLength}`); // tslint:disable-line no-console
+                if (gifData.contentLength !== null) {
+                    tracker.updateData({
+                        gifSize: gifData.contentLength,
+                    });
+                    const gifSizeThreshold = this.db.getGifSizeThreshold();
+                    if (gifData.contentLength < gifSizeThreshold) {
+                        Logger.debug(AntiGifBot.TAG, `[${submission.id}] GIF content length too small with ${gifData.contentLength} < ${gifSizeThreshold}`);
+                        return tracker.endTracking(TrackingStatus.IGNORED);
+                    }
                 }
+                Logger.debug(AntiGifBot.TAG, `[${submission.id}] GIF link identified with size ${gifData.contentLength}`);
 
                 let mp4Url = await this.toMp4Url(gifUrl, submission);
                 if (!mp4Url) {
+                    Logger.debug(AntiGifBot.TAG, `[${submission.id}] Uploading GIF...`);
+                    const startTime = Date.now();
                     mp4Url = new URL2(await this.uploadGif(gifUrl, `https://redd.it/${submission.id}`, submission.over_18));
+                    const uploadTime = Date.now() - startTime;
+                    tracker.updateData({
+                        uploadTime,
+                    });
+                    Logger.debug(AntiGifBot.TAG, `[${submission.id}] Uploaded GIF in ${uploadTime} ms, available at ${mp4Url.href}`);
                 }
+                tracker.updateData({
+                    mp4Link: mp4Url.href,
+                });
 
                 if (mp4Url.hostname === "gfycat.com") {
                     const details = await this.gfycat.getGifDetails({
                         gfyId: mp4Url.pathname.slice(1),
                     });
                     itemData = {
-                        mp4Url: mp4Url.href,
+                        mp4Link: mp4Url.href,
                         gifSize: details.gfyItem.gifSize || gifData.contentLength || -1, // TODO Apparently gfyItem.gifSize is null sometimes
                         mp4Size: details.gfyItem.mp4Size,
                         webmSize: details.gfyItem.webmSize,
                     };
                 } else {
                     let mp4Data;
-                    for (let retryCount = 0; retryCount < 10; retryCount++) { // MAGIC
+                    // TODO This loop doesn't work the way you think it does...
+                    for (let retryCount = 0; !mp4Data && retryCount < 10; retryCount++) { // MAGIC
                         try {
+                            Logger.debug(AntiGifBot.TAG, `[${submission.id}] Checking MP4 link ${mp4Url.href}`);
                             mp4Data = await this.checkUrl(mp4Url, "video/mp4");
                         } catch {
+                            await delay(15000); // MAGIC
                             // ignore and try again
                         }
-                        await delay(15000); // MAGIC
                     }
+                    // TODO upload on errors?
                     if (!mp4Data) {
-                        throw new Error(`Failed to get mp4 link info within 10 attepts with 15000ms delay`); // MAGIC
+                        Logger.warn(AntiGifBot.TAG, `[${submission.id}] Couldn't fetch MP4 info`);
+                        return tracker.endTracking(TrackingStatus.ERROR, {
+                            errorCode: TrackingItemErrorCodes.NO_MP4_LOCATION,
+                            mp4Link: mp4Url.href,
+                        });
                     }
                     if (!mp4Data.statusOk) {
-                        return console.log(submission.id, `Unexpected mp4 status ${mp4Data.statusCode} ${mp4Data.statusText}`); // tslint:disable-line no-console max-line-length
+                        Logger.warn(AntiGifBot.TAG, `[${submission.id}] Unexpected MP4 status ${mp4Data.statusCode} ${mp4Data.statusText}`);
+                        return tracker.endTracking(TrackingStatus.ERROR, {
+                            errorCode: TrackingItemErrorCodes.HEAD_FAILED_MP4,
+                            errorDetail: TrackingErrorDetails.STATUS_CODE,
+                            errorExtra: `${mp4Data.statusCode} ${mp4Data.statusText}`,
+                        });
                     }
                     if (!mp4Data.expectedType) {
-                        return console.log(submission.id, `Unexpected mp4 content type ${mp4Data.contentType}`); // tslint:disable-line no-console
+                        Logger.warn(AntiGifBot.TAG, `[${submission.id}] Unexpected MP4 content type ${mp4Data.contentType}`);
+                        return tracker.endTracking(TrackingStatus.ERROR, {
+                            errorCode: TrackingItemErrorCodes.HEAD_FAILED_MP4,
+                            errorDetail: TrackingErrorDetails.CONTENT_TYPE,
+                            errorExtra: `${mp4Data.contentType}`,
+                        });
                     }
                     if (!mp4Data.contentLength) {
+                        Logger.warn(AntiGifBot.TAG, `[${submission.id}] Unknown MP4 content length`);
                         // TODO Might be a better way to handle this (download?)
-                        return console.log(submission.id, `Unknown mp4 content length`); // tslint:disable-line no-console
+                        return tracker.endTracking(TrackingStatus.ERROR, {
+                            errorCode: TrackingItemErrorCodes.HEAD_FAILED_MP4,
+                            errorDetail: TrackingErrorDetails.CONTENT_LENGTH,
+                            errorExtra: `${mp4Data.contentType}`,
+                        });
                     }
+                    Logger.debug(AntiGifBot.TAG, `[${submission.id}] MP4 link identified with size ${mp4Data.contentLength}`);
 
                     itemData = {
-                        mp4Url: mp4Url.href,
+                        mp4Link: mp4Url.href,
                         // TODO I _assume_ that if it's not uploaded it's from a known host which provides a length header. What if not?
                         gifSize: gifData.contentLength || -1,
                         mp4Size: mp4Data.contentLength,
                     };
                 }
+                tracker.updateData({
+                    mp4Size: itemData.mp4Size,
+                    webmSize: itemData.webmSize,
+                });
                 await this.db.cacheLink(url.href, itemData);
+            } else {
+                tracker.updateData({
+                    fromCache: true,
+                    mp4Link: itemData.mp4Link,
+                    gifSize: itemData.gifSize,
+                    mp4Size: itemData.mp4Size,
+                    webmSize: itemData.webmSize,
+                });
+                Tracker.trackGifAlreadyCached(ItemTypes.SUBMISSION);
             }
 
             const mp4BiggerThanGif = itemData.mp4Size > itemData.gifSize;
             const webmBiggerThanMp4 = itemData.webmSize !== undefined && itemData.webmSize > itemData.mp4Size;
             const savings = this.calculateSavings(itemData.gifSize, itemData.mp4Size, itemData.webmSize);
             if (mp4BiggerThanGif) { // TODO Check for allowed domains
-                return console.log(submission.id, `mp4 is bigger than gif (mp4: ${itemData.mp4Size}, gif: ${itemData.gifSize})`); // tslint:disable-line no-console max-line-length
+                return Logger.warn(AntiGifBot.TAG, `[${submission.id}] MP4 is bigger than GIF (MP4: ${itemData.mp4Size}, GIF: ${itemData.gifSize})`);
             }
             const replyTemplates = this.db.getReplyTemplates().gifPost;
             const replyPartsDefault = replyTemplates.parts.default;
-            const replyPartsSpecific = replyTemplates.parts[submission.subreddit.display_name];
+            const replyPartsSpecific = replyTemplates.parts[subreddit];
             const replyParts = Object.assign({}, replyPartsDefault, replyPartsSpecific);
             let replyText = replyTemplates.base
                 .replace("{{sizeComparisonText}}", mp4BiggerThanGif ? replyParts.mp4BiggerThanGif : replyParts.gifBiggerThanMp4)
@@ -189,39 +266,54 @@ export default class AntiGifBot {
                 .replace("{{mp4Save}}", String(savings.mp4Save))
                 .replace("{{webmSave}}", String(savings.webmSave || ""))
                 .replace("{{version}}", version)
-                .replace("{{link}}", itemData.mp4Url);
+                .replace("{{link}}", itemData.mp4Link);
             // TODO Keep this or not?
             for (const [k, v] of Object.entries(replyParts)) {
                 replyText = replyText.replace(`{{${k}}}`, v || "");
             }
 
             try {
-                console.log(submission.id, `Reply to post ${submission.id} in ${submission.subreddit.display_name}: ${replyText}`); // tslint:disable-line no-console max-line-length
+                Logger.debug(AntiGifBot.TAG, `[${submission.id}] Reply in ${subreddit}: ${replyText}`);
                 // await (submission.reply(replyText) as Promise<any>); // TS shenanigans
+                return tracker.endTracking(TrackingStatus.SUCCESS);
             } catch (err) {
                 // TODO Auto-detect ban, retry later on rate limit
-                console.log(submission.id, err); // tslint:disable-line no-console
+                // "Loop error: Error: RATELIMIT,you are doing that too much. try again in 7 minutes.,ratelimit"
+                if (err.name === "StatusCodeError" && err.statusCode === 403 && err.error.message === "Forbidden") {
+                    // Ban
+                    await this.db.addException(ExceptionTypes.SUBREDDIT, subreddit, ExceptionSources.BAN_ERROR, null, Date.now());
+                    Logger.info(AntiGifBot.TAG, `[${submission.id}] Unexpectedly banned in ${subreddit}`);
+                    return tracker.endTracking(TrackingStatus.ERROR, {
+                        errorCode: TrackingItemErrorCodes.REPLY_BAN,
+                    });
+                }
+                Logger.warn(AntiGifBot.TAG, `[${submission.id}] Unknown error while replying`, err);
+                return tracker.endTracking(TrackingStatus.ERROR, {
+                    errorCode: TrackingItemErrorCodes.REPLY_FAIL,
+                });
             }
         } catch (e) {
-            console.log(submission.id, e); // tslint:disable-line no-console
+            Logger.error(AntiGifBot.TAG, `[${submission.id}] Unexpected error while processing submission`, e);
         }
     }
 
     private async processComment(comment: Comment) {
         try {
+            const subreddit = comment.subreddit.display_name;
+            Tracker.trackNewIncomingItem(ItemTypes.COMMENT, subreddit);
             if (await this.db.isException(ExceptionTypes.USER, comment.author.name)) {
                 return;
             }
         } catch (e) {
-            console.log(e); // tslint:disable-line no-console
+            Logger.error(AntiGifBot.TAG, `[${comment.id}] Unexpected error while processing comment`, e);
         }
     }
 
     private async processInbox(message: PrivateMessage) {
         try {
-            //
+            Tracker.trackNewIncomingItem(ItemTypes.INBOX, null); // TODO null or not
         } catch (e) {
-            console.log(e); // tslint:disable-line no-console
+            Logger.error(AntiGifBot.TAG, `[${message.id}] Unexpected error while processing message`, e);
         }
     }
 
@@ -235,7 +327,7 @@ export default class AntiGifBot {
         if (url.domain === "giphy.com" && url.pathname.startsWith("/gifs/") && !url.pathname.endsWith(".mp4")) {
             return true;
         }
-        return true;
+        return false;
     }
 
     // Some URLs embed gifs but aren't actually the direct link to the gif. This method transforms such known URLs if required.
@@ -274,7 +366,7 @@ export default class AntiGifBot {
     }
 
     private async toMp4Url(url: URL2, submission?: Submission): Promise<URL2 | null> {
-        if (["giphy.com", "i.gyazo.com", "media.tumblr.com", "i.makeagif.com", "j.gifs.com", "gifgif.io"].includes(url.hostname)) {
+        if (["i.giphy.com", "i.gyazo.com", "media.tumblr.com", "i.makeagif.com", "j.gifs.com"].includes(url.hostname)) {
             return new URL2(url.href.replace(/\.gif$/, ".mp4"));
         }
         if (url.domain === "gfycat.com") {
@@ -282,14 +374,15 @@ export default class AntiGifBot {
                 .replace(/(-size_restricted|-small|-max-14?mb|-100px)?(\.gif)$/, ""));
         }
         if (url.hostname === "i.redd.it" && submission) {
-            for (let retryCount = 0; retryCount < 10; retryCount++) { // MAGIC
+            for (let retryCount = 0; retryCount < 20; retryCount++) { // MAGIC
                 try {
                     const mp4Link = submission.preview.images[0].variants.mp4.source.url; // Thanks Reddit
                     return new URL2(mp4Link);
                 } catch {
+                    Logger.debug(AntiGifBot.TAG, `[${submission.id}] No reddit mp4 preview found, ${retryCount < 20 ? "retrying" : "aborting"}`); // MAGIC
                     // ignore and try again
                 }
-                await delay(30000); // MAGIC
+                await delay(15000); // MAGIC
                 submission = await (submission.refresh() as Promise<any>) as Submission; // TS shenanigans
             }
             return null;

@@ -1,4 +1,5 @@
 import Snoowrap = require("snoowrap");
+import Logger from "../../../logger";
 import { version as botVersion } from "../../../utils";
 import IngestSource, { Capabilities } from "../ingestSource";
 
@@ -21,6 +22,8 @@ export interface SnoowrapIngestOptions {
 
 export default class SnoowrapIngest extends IngestSource {
 
+    private static readonly TAG = "SnoowrapIngest";
+
     private snoo: Snoowrap;
     private submissionFetchIntervalTime: number;
     private commentFetchIntervalTime: number;
@@ -30,6 +33,7 @@ export default class SnoowrapIngest extends IngestSource {
     private inboxTimeout?: NodeJS.Timeout;
     private lastSubmissionId?: string;
     private lastCommentId?: string;
+    private stopIngest: boolean = false;
 
     private zeroResultCommentFetches: number = 0;
 
@@ -61,7 +65,7 @@ export default class SnoowrapIngest extends IngestSource {
             // This is apparently supposed to have heavy rate limiting, I have not noticed that yet.
             await this.snoo.readAllMessages();
         } catch (e) {
-            console.log(e); // tslint:disable-line no-console
+            Logger.debug(SnoowrapIngest.TAG, "Error when reading all messages", e);
         }
         await Promise.all([
             this.loadSubmissions(),
@@ -71,7 +75,10 @@ export default class SnoowrapIngest extends IngestSource {
     }
 
     public async stop() {
-        // TODO If one of these is running at the moment... it will still queue itself again
+        this.stopIngest = true;
+        this.setSubmissionCallback(undefined);
+        this.setCommentCallback(undefined);
+        this.setInboxCallback(undefined);
         if (this.submissionTimeout) {
             clearTimeout(this.submissionTimeout);
         }
@@ -92,16 +99,19 @@ export default class SnoowrapIngest extends IngestSource {
                     show: "all",
                     before: this.lastSubmissionId || undefined,
                 });
+                if (this.stopIngest) {
+                    return;
+                }
                 if (submissions.length) {
                     this.lastSubmissionId = submissions[0].name;
                     for (const s of submissions.reverse()) {
                         this.submissionCallback(s);
                     }
                 } else {
-                    console.log("Got zero submissions"); // tslint:disable-line no-console
+                    Logger.info(SnoowrapIngest.TAG, "Got zero submissions from reddit");
                 }
             } catch (e) {
-                console.log(e); // tslint:disable-line no-console
+                Logger.error(SnoowrapIngest.TAG, "Unexpected error when loading new submissions", e);
             }
         }
         this.submissionTimeout = setTimeout(this.loadSubmissions,
@@ -117,22 +127,26 @@ export default class SnoowrapIngest extends IngestSource {
                     before: this.lastCommentId || undefined,
                     // NOTE: The above makes reddit return 0 comments when the ID is too far behind (1000 items I assume)
                 });
+                if (this.stopIngest) {
+                    return;
+                }
                 if (comments.length) {
+                    this.zeroResultCommentFetches = 0;
                     this.lastCommentId = comments[0].name;
                     for (const c of comments.reverse()) {
                         this.commentCallback(c);
                     }
                 } else {
-                    console.log("Got zero comments"); // tslint:disable-line no-console
+                    Logger.info(SnoowrapIngest.TAG, "Got zero comments from reddit");
                     this.zeroResultCommentFetches++;
                     if (this.zeroResultCommentFetches > 4 && this.lastCommentId) {
-                        console.log("Got too many zero result comment fetches, resetting last comment ID"); // tslint:disable-line no-console
+                        Logger.info(SnoowrapIngest.TAG, "Got too many zero result comment fetches, resetting last comment ID");
                         this.zeroResultCommentFetches = 0;
                         this.lastCommentId = undefined;
                     }
                 }
             } catch (e) {
-                console.log(e); // tslint:disable-line no-console
+                Logger.error(SnoowrapIngest.TAG, "Unexpected error when loading new comments", e);
             }
         }
         this.commentTimeout = setTimeout(this.loadComments,
@@ -144,9 +158,12 @@ export default class SnoowrapIngest extends IngestSource {
         if (this.inboxCallback) {
             try {
                 const inbox = await this.snoo.getUnreadMessages({
-                    limit: 100,
+                    limit: 50,
                     show: "all",
                 });
+                if (this.stopIngest) {
+                    return;
+                }
                 if (inbox.length) {
                     await this.snoo.markMessagesAsRead(inbox.map(m => m.name));
                     for (const i of inbox.reverse()) {
@@ -154,7 +171,7 @@ export default class SnoowrapIngest extends IngestSource {
                     }
                 }
             } catch (e) {
-                console.log(e); // tslint:disable-line no-console
+                Logger.error(SnoowrapIngest.TAG, "Unexpected error when loading new inbox messages", e);
             }
         }
         this.inboxTimeout = setTimeout(this.loadInbox,
@@ -175,7 +192,7 @@ export default class SnoowrapIngest extends IngestSource {
             retryErrorCodes: [999], // TODO Does that fix the crashes I experienced before?
             maxRetryAttempts: 0,
             warnings: process.env.NODE_ENV !== "production",
-            debug: process.env.NODE_ENV !== "production",
+            debug: false, // process.env.NODE_ENV !== "production",
         });
         return s;
     }

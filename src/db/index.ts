@@ -1,82 +1,10 @@
 import IORedis = require("ioredis");
 
 export interface GifCacheItem {
-    mp4Url: string;
+    mp4Link: string;
     gifSize: number;
     mp4Size: number;
     webmSize?: number;
-}
-
-export enum TrackTypes {
-    NEW_SUBMISSION, // 0
-    NEW_COMMENT,
-    NEW_INBOX,
-    ERROR,
-    GIF_LINK,
-    GIF_DOMAIN, // 5
-    GIF_SUBREDDIT,
-    GIF_COMMENT,
-    GIF_INBOX,
-    GIF_UPLOADED,
-    GIF_IN_CACHE, // 10
-    GIF_PROCESSED,
-}
-
-const TrackKeys = {
-    0: "allSubmissionsCount",
-    1: "allCommentsCount",
-    2: "allInboxCount",
-    3: "errors",
-    4: "totalGifLinks",
-    5: "gifDomainStats",
-    6: "gifSubredditStats",
-    7: "gifCommentSubredditStats",
-    8: "totalGifsInInbox",
-    9: "totalGifsUploaded",
-    10: "totalGifsInCache",
-    11: "gifsProcessed",
-};
-
-interface TrackingQueue {
-    [TrackTypes.NEW_SUBMISSION]: number; // 0
-    [TrackTypes.NEW_COMMENT]: number;
-    [TrackTypes.NEW_INBOX]: number;
-    [TrackTypes.ERROR]: Error[];
-    [TrackTypes.GIF_LINK]: number;
-    [TrackTypes.GIF_DOMAIN]: string[]; // 5
-    [TrackTypes.GIF_SUBREDDIT]: string[];
-    [TrackTypes.GIF_COMMENT]: string[];
-    [TrackTypes.GIF_INBOX]: number;
-    [TrackTypes.GIF_UPLOADED]: number;
-    [TrackTypes.GIF_IN_CACHE]: number; // 10
-    [TrackTypes.GIF_PROCESSED]: TrackingGifProcessedData[];
-}
-
-interface TrackingGifProcessedData {
-    status: TrackingGifProcessedStatus;
-    timestamp: number;
-    gifUrl: string;
-    mp4Url: string | null;
-    gifSize: number | null;
-    mp4Size: number | null;
-    webmSize: number | null;
-    uploaded: boolean;
-    uploadTime: number | null;
-    subreddit: string;
-    error: Error | null;
-}
-
-enum TrackingGifProcessedStatus {
-    SUCCESS = "success",                 // Everything worked flawlessly
-    IGNORING = "ignoring",               // Ignoring item due to exception entry
-    REPLY_FAILED = "reply-failed",       // The reddit reply with the mp4 link failed (ban/ratelimit/500)
-    GIF_TOO_SMALL = "gif-too-small",             // Gif size is below threshold
-    NOT_GIF_LINK = "not-gif-link",       // Linked URL does not lead to a file with an image/gif mime type
-    NO_MP4_LOCATION = "no-mp4-location", // Reddit posts may not have an mp4 link attached to them in time
-    UPLOAD_FAILED = "upload-failed",     // Uploading the gif to an external service failed
-    GIF_HEAD_FAILED = "gif-head-failed", // The HEAD request(s) to the gif file failed (invalid url/host unreachabe)
-    MP4_HEAD_FAILED = "mp4-head-failed", // The HEAD request(s) to the mp4 file failed (invalid url/host unreachabe)
-    UNKNOWN = "unknown",
 }
 
 export enum ExceptionSources {
@@ -129,11 +57,9 @@ interface ReplyTemplate {
 - redditMp4DeferCount/generalMp4DeferCount -> I don't have fixed loop intervals anymore, also have to include defer delay (per defer), call it "count"
 - mp4CanBeBiggerDomains/nonDotGifDomains/knownDomains
 */
-// Maybe somehow set up more easily customizable post filters? Apart from NSFW.
 export default class Database {
 
-    private db: IORedis.Redis;
-    private trackingQueue: TrackingQueue;
+    private readonly db: IORedis.Redis;
 
     private ingestSourceOrder: string[];
     private gifSizeThreshold: number;
@@ -146,28 +72,15 @@ export default class Database {
             connectionName: "anti-gif-bot",
             showFriendlyErrorStack: process.env.NODE_ENV !== "production",
         });
-        this.trackingQueue = {
-            [TrackTypes.NEW_SUBMISSION]: 0, // 0
-            [TrackTypes.NEW_COMMENT]: 0,
-            [TrackTypes.NEW_INBOX]: 0,
-            [TrackTypes.ERROR]: [],
-            [TrackTypes.GIF_LINK]: 0,
-            [TrackTypes.GIF_DOMAIN]: [], // 5
-            [TrackTypes.GIF_SUBREDDIT]: [],
-            [TrackTypes.GIF_COMMENT]: [],
-            [TrackTypes.GIF_INBOX]: 0,
-            [TrackTypes.GIF_UPLOADED]: 0,
-            [TrackTypes.GIF_IN_CACHE]: 0, // 10
-            [TrackTypes.GIF_PROCESSED]: [],
-        };
         this.ingestSourceOrder = [];
         this.gifSizeThreshold = 0xDEADBEEF; // 3.5 GB :P
-        this.replyTemplates = { gifPost: { base: "", parts: { default: {} } }, gifComment: { base: "", parts: { default: {} } } };
+        this.replyTemplates = {} as ReplyTemplates;
     }
 
     public async init() {
         await this.db.connect();
-        await this.fetchConfig();
+        await this.setupDB();
+        await this.fetchConfig(); // TODO Periodically refresh
     }
 
     public getIngestSourceOrder(): string[] {
@@ -194,6 +107,7 @@ export default class Database {
         await this.db.set(`cache-${gifUrl}`, JSON.stringify(item), "EX", 60 * 60 * 24 * 7); // 7 days
     }
 
+    // TODO duration is never checked anywhere to expire
     // tslint:disable-next-line:max-line-length
     public async addException(type: ExceptionTypes, location: string, source: ExceptionSources, reason: string | null, timestamp: number, duration?: number): Promise<void> {
         await this.db.hset("exceptions", `${type}-${location}`, JSON.stringify({
@@ -266,48 +180,25 @@ export default class Database {
         await this.db.hdel("exceptions", `${type}-${location}`);
     }
 
-    // Tracking methods should purely be statistical data and not affect anything
-    // TODO:
-    //  - Track gif stats, including sizes, subreddits and upload times. Also include errors? In GIF_PROCESSED.
-    //  - Process and track errors - separate into different error types somewhere
-    //  - deferCount/deferFails - part of stats?
-    //  * Those stats should probably be stored somewhere other than Redis. A dedicated table or let zabbix/grafana take care of that?
-    // TODO make this a sync method that adds tracking data to a queue that is periodically processed
-    public async track(type: TrackTypes, ...args: any): Promise<void> {
-        switch (type) {
-
-            // Args - count?: number
-            case TrackTypes.NEW_SUBMISSION:
-            case TrackTypes.NEW_COMMENT:
-            case TrackTypes.NEW_INBOX:
-            case TrackTypes.GIF_LINK:
-            case TrackTypes.GIF_INBOX:
-            case TrackTypes.GIF_UPLOADED:
-            case TrackTypes.GIF_IN_CACHE:
-                if (args[0] !== undefined && Number.isNaN(+args[0])) {
-                    throw new Error(`Invalid arguments for tracking type '${type}': '${args[0]}' is not a number or undefined`);
-                }
-                await this.db.incrby(TrackKeys[type], args[0] || 1);
-                break;
-
-            // Args - domain/subreddit?: string
-            case TrackTypes.GIF_DOMAIN:
-            case TrackTypes.GIF_SUBREDDIT:
-            case TrackTypes.GIF_COMMENT:
-                if (typeof args[0] !== "string") {
-                    throw new Error(`Invalid arguments for tracking type '${type}': '${args[0]}' is not a string`);
-                }
-                await this.db.hincrby(TrackKeys[type], args[0], 1);
-                break;
-
-            // Args -
-            case TrackTypes.ERROR:
-            case TrackTypes.GIF_PROCESSED:
-                // Implement those
-                break;
-
-            default:
-                throw new Error(`Unknown tracking type: '${type}'`);
+    private async setupDB() {
+        if (!await this.db.get("setup")) {
+            await this.db.set("setup", true);
+            await this.db.set("ingestSourceOrder", '["snoowrap"]');
+            await this.db.set("gifSizeThreshold", 2_000_000);
+            await this.db.set("replyTemplates", JSON.stringify({
+                gifPost: {
+                    base: "",
+                    parts: {
+                        default: {},
+                    },
+                },
+                gifComment: {
+                    base: "",
+                    parts: {
+                        default: {},
+                    },
+                },
+            }));
         }
     }
 

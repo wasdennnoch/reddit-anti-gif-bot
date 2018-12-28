@@ -1,45 +1,50 @@
 require("dotenv").config(); // tslint:disable-line no-var-requires
 
-import { Comment, PrivateMessage } from "snoowrap";
+import { Comment, PrivateMessage, Submission } from "snoowrap";
+import AntiGifBot from "./bot";
+import Database from "./db";
 import Ingest from "./ingest";
+import Logger from "./logger";
 
-async function test() {
+const TAG = "Index";
 
-    console.log("Setting up..."); // tslint:disable-line no-console
+async function runBot() {
 
-    const i = new Ingest({
-        sourceOptions: {
-            snoowrap: {
-                fetchIntervals: {
-                    comments: 1337,
-                },
-            },
-        },
-    });
-    await i.init();
+    Logger.debug(TAG, "Setting up...");
 
-    i.setInboxCallback((message: PrivateMessage) => {
-        // In ban messages the author is null. Also they have the subreddit in the subject, easy to parse.
-        // So, ban message if was_comment == false, author == null, subject start with "You've been( temporarily)? banned from participating in r/"
-        console.log(`[${message.created_utc}] [${message.name}] was_comment: ${message.was_comment}, subject: "${message.subject}" | ${message.author ? message.author.name : message.author}${message.subreddit ? ` in ${message.subreddit.display_name}` : ""}: ${message.body}`); // tslint:disable-line no-console max-line-length
+    const db = new Database();
+    await db.init();
+    const ingest = new Ingest();
+    await ingest.init();
+    const bot = new AntiGifBot(db);
+    await bot.init();
+
+    ingest.setSubmissionCallback((submission: Submission) => {
+        bot.addSubmission(submission);
     });
 
-    const prevComments = new Map<string, Comment>();
-
-    i.setCommentCallback((comment: Comment) => {
-        if (prevComments.has(comment.name)) {
-            console.log(`Already had comment with ID ${comment.name} from ${comment.author.name}`); // tslint:disable-line no-console
-        } else {
-            prevComments.set(comment.name, comment);
-        }
-        if (prevComments.size % 100 === 0) {
-            console.log("Comments saved:", prevComments.size); // tslint:disable-line no-console
-        }
+    /*ingest.setCommentCallback((comment: Comment) => {
+        bot.addComment(comment);
     });
 
-    console.log("Starting ingest..."); // tslint:disable-line no-console
-    await i.startIngest();
+    ingest.setInboxCallback((message: PrivateMessage) => {
+        bot.addInbox(message);
+    });*/
+
+    Logger.debug(TAG, "Starting ingest...");
+    await ingest.startIngest();
 
 }
 
-test().catch(console.error); // tslint:disable-line no-console
+runBot().catch(err => {
+    Logger.error(TAG, "Error starting bot", err);
+    process.exit(1);
+});
+
+process.on("uncaughtException", err => {
+    Logger.wtf(TAG, "Uncaught Exception", err);
+});
+
+process.on("unhandledRejection", err => {
+    Logger.wtf(TAG, "Unhandled Rejection", err);
+});
