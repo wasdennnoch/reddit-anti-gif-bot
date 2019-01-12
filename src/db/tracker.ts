@@ -1,57 +1,13 @@
 import IORedis = require("ioredis");
+import Database from ".";
 import URL2 from "../bot/url2";
 import Logger from "../logger";
 import { getReadableFileSize } from "../utils";
-
-enum TrackTypes {
-    NEW_SUBMISSION, // 0
-    NEW_COMMENT,
-    NEW_INBOX,
-    ERROR,
-    GIF_LINK,
-    GIF_DOMAIN, // 5
-    GIF_SUBREDDIT,
-    GIF_COMMENT,
-    GIF_INBOX,
-    GIF_UPLOADED,
-    GIF_IN_CACHE, // 10
-    GIF_PROCESSED,
-}
 
 export enum ItemTypes {
     SUBMISSION = "submission",
     COMMENT = "comment",
     INBOX = "inbox",
-}
-
-const TrackKeys = {
-    0: "allSubmissionsCount",
-    1: "allCommentsCount",
-    2: "allInboxCount",
-    3: "errors",
-    4: "totalGifLinks",
-    5: "gifDomainStats",
-    6: "gifSubredditStats",
-    7: "gifCommentSubredditStats",
-    8: "totalGifsInInbox",
-    9: "totalGifsUploaded",
-    10: "totalGifsInCache",
-    11: "gifsProcessed",
-};
-
-interface TrackingQueue {
-    [TrackTypes.NEW_SUBMISSION]: number; // 0
-    [TrackTypes.NEW_COMMENT]: number;
-    [TrackTypes.NEW_INBOX]: number;
-    [TrackTypes.ERROR]: Error[];
-    [TrackTypes.GIF_LINK]: number;
-    [TrackTypes.GIF_DOMAIN]: string[]; // 5
-    [TrackTypes.GIF_SUBREDDIT]: string[];
-    [TrackTypes.GIF_COMMENT]: string[];
-    [TrackTypes.GIF_INBOX]: number;
-    [TrackTypes.GIF_UPLOADED]: number;
-    [TrackTypes.GIF_IN_CACHE]: number; // 10
-    [TrackTypes.GIF_PROCESSED]: any[];
 }
 
 export enum TrackingStatus {
@@ -61,14 +17,16 @@ export enum TrackingStatus {
 }
 
 export enum TrackingItemErrorCodes {
-    REPLY_BAN = "reply-ban",                   // The reddit reply with the mp4 link failed due to an undetected ban
-    REPLY_RATELIMIT = "reply-ratelimit",       // The reddit reply with the mp4 link failed due to a rate limit
-    REPLY_FAIL = "reply-fail",                 // The reddit reply with the mp4 link failed due to unknown reasons (such as a 500)
-    GIF_TOO_SMALL = "gif-too-small",           // Gif size is below threshold
-    NO_MP4_LOCATION = "no-mp4-location",       // Reddit posts not always have an mp4 link attached to them in time
-    UPLOAD_FAILED = "upload-failed",           // Uploading the gif to an external service failed
-    HEAD_FAILED_GIF = "head-failed-gif",       // The HEAD request(s) to the gif file failed (invalid url/host unreachabe etc)
-    HEAD_FAILED_MP4 = "head-failed-mp4",       // The HEAD request(s) to the mp4 file failed (invalid url/host unreachabe etc)
+    REPLY_BAN = "reply-ban",                     // The reddit reply with the mp4 link failed due to an undetected ban
+    REPLY_RATELIMIT = "reply-ratelimit",         // The reddit reply with the mp4 link failed due to a rate limit
+    REPLY_FAIL = "reply-fail",                   // The reddit reply with the mp4 link failed due to unknown reasons (such as a 500)
+    GIF_TOO_SMALL = "gif-too-small",             // Gif size is below threshold
+    NO_MP4_LOCATION = "no-mp4-location",         // Hosts that are known to have mp4 versions may not always actucally have them (in time)
+    UPLOAD_FAILED = "upload-failed",             // Uploading the gif to an external service failed
+    HEAD_FAILED_GIF = "head-failed-gif",         // The HEAD request(s) to the gif file failed (invalid url/host unreachabe etc)
+    HEAD_FAILED_MP4 = "head-failed-mp4",         // The HEAD request(s) to the mp4 file failed (invalid url/host unreachabe etc)
+    MP4_BIGGER_THAN_GIF = "mp4-bigger-than-gif", // The MP4 file was bigger than the gif while when it was not allowed to be
+    TRACKER_NOT_ENDED = "tracker-not-ended",
     UNKNOWN = "unknown",
 }
 
@@ -77,35 +35,8 @@ export enum TrackingErrorDetails {
     STATUS_CODE = "status-code",
     CONTENT_TYPE = "content-type",
     CONTENT_LENGTH = "content-length",
+    MAX_RETRY_COUNT_REACHED = "max-retry-count-reached",
 }
-
-/*
-Stuff that should be permanently saved
-Tracking DB schema (relational without any relations):
-
-Column Name       | Type / Flags          | Description
------------------ | --------------------- | ---------------------------------------
-id                | autoincrement primary | Just an ID field for the DB
-itemType          | string                | "submission/comment/inbox"
-timestampCreated  | datetime              | When the item was created on reddit
-timestampStart    | datetime              | When the bot started handling the item
-timestampEnd      | datetime              | When the bot was done handling the item
-status            | string                | "success/error/ignored"
-redditId          | string                | ID of the reddit item
-subreddit         | string?               | May be null when requested in DM
-domain            | string                | Pure domain
-hostname          | string                | Domain including subdomains
-gifLink           | string                |
-mp4Link           | string?               |
-gifSize           | number?               |
-mp4Size           | number?               |
-webmSize          | number?               |
-fromCache         | boolean?              |
-uploadTime        | number?               |
-errorCode         | string?               | Such as head-failed-mp4
-errorDetail       | string?               | Such as status-code
-errorExtra        | string?               | Such as 403
-*/
 
 interface TrackingItemEntry {
     id: number;
@@ -115,127 +46,168 @@ interface TrackingItemEntry {
     timestampEnd: Date;
     status: TrackingStatus;
     redditId: string;
-    subreddit: string | null;
+    subreddit?: string;
     domain: string;
     hostname: string;
     gifLink: string;
-    mp4Link: string | null;
-    gifSize: number | null;
-    mp4Size: number | null;
-    webmSize: number | null;
-    fromCache: boolean | null;
-    uploadTime: number | null;
-    errorCode: TrackingItemErrorCodes | null;
-    errorDetail: TrackingErrorDetails | null;
-    errorExtra: string | null;
+    mp4Link?: string;
+    gifSize?: number;
+    mp4Size?: number;
+    webmSize?: number;
+    fromCache?: boolean;
+    uploadTime?: number;
+    errorCode?: TrackingItemErrorCodes;
+    errorDetail?: TrackingErrorDetails;
+    errorExtra?: string;
 }
 
+interface UpdateCache {
+    allSubmissionsCount: number;
+    allCommentsCount: number;
+    allInboxCount: number;
+    totalGifSubmissions: number;
+    totalGifComments: number;
+    totalGifInbox: number;
+    domainCounts: ItemLocationCounts;
+    subredditGifSubmissionCounts: ItemLocationCounts;
+    subredditGifCommentCounts: ItemLocationCounts;
+    trackingItems: TrackingItemEntry[];
+}
+
+interface ItemLocationCounts {
+    [key: string]: number;
+}
+
+let updateQueue: UpdateCache;
+
+// TODO Track defers
 export default class Tracker {
 
-    private trackingQueue: TrackingQueue;
+    private static readonly TAG = "Tracker";
 
-    constructor(readonly db: IORedis.Redis) {
-        this.trackingQueue = {
-            [TrackTypes.NEW_SUBMISSION]: 0, // 0
-            [TrackTypes.NEW_COMMENT]: 0,
-            [TrackTypes.NEW_INBOX]: 0,
-            [TrackTypes.ERROR]: [],
-            [TrackTypes.GIF_LINK]: 0,
-            [TrackTypes.GIF_DOMAIN]: [], // 5
-            [TrackTypes.GIF_SUBREDDIT]: [],
-            [TrackTypes.GIF_COMMENT]: [],
-            [TrackTypes.GIF_INBOX]: 0,
-            [TrackTypes.GIF_UPLOADED]: 0,
-            [TrackTypes.GIF_IN_CACHE]: 0, // 10
-            [TrackTypes.GIF_PROCESSED]: [],
+    private loopInterval?: NodeJS.Timeout;
+
+    constructor(readonly db: Database) {
+        this.loop = this.loop.bind(this);
+
+        this.clearQueue();
+        this.queueInterval();
+    }
+
+    private clearQueue() {
+        updateQueue = {
+            allSubmissionsCount: 0,
+            allCommentsCount: 0,
+            allInboxCount: 0,
+            totalGifSubmissions: 0,
+            totalGifComments: 0,
+            totalGifInbox: 0,
+            domainCounts: {},
+            subredditGifSubmissionCounts: {},
+            subredditGifCommentCounts: {},
+            trackingItems: [],
         };
     }
 
-    public static trackNewIncomingItem(type: ItemTypes, location: string | null): void { // TODO nullable?
-        // A new submission/comment/message arrived in that subreddit
-        // NEW_SUBMISSION / NEW_COMMENT / NEW_INBOX
-        // Increase total count for type
-        // Increase count for type in location
+    private async loop() {
+        Logger.verbose(Tracker.TAG, "Pushing new queue items to DB");
+        try {
+            const queue = updateQueue;
+            this.clearQueue();
+            const db = this.db.redisRaw.pipeline(); // Or .multi() ?
+            db.incrby("allSubmissionsCount", queue.allSubmissionsCount);
+            db.incrby("allCommentsCount", queue.allCommentsCount);
+            db.incrby("allInboxCount", queue.allInboxCount);
+            db.incrby("totalGifSubmissions", queue.totalGifSubmissions);
+            db.incrby("totalGifComments", queue.totalGifComments);
+            db.incrby("totalGifInbox", queue.totalGifInbox);
+            this.applyItemLocationCounts(db, "gifDomainStats", queue.domainCounts);
+            this.applyItemLocationCounts(db, "gifSubredditStats", queue.subredditGifSubmissionCounts);
+            this.applyItemLocationCounts(db, "gifCommentSubredditStats", queue.subredditGifCommentCounts);
+            await db.exec();
+            for (const item of queue.trackingItems) {
+                const entries = Object.entries(item).filter(e => e[1] !== undefined && e[1] !== null);
+                const keys = entries.map(e => e[0]);
+                const values = entries.map(v => v[1]);
+                const valueTemplate = Object.keys(keys).map(k => `$${1 + +k}`).join(", ");
+                try {
+                    await this.db.postgresRaw.query(`INSERT INTO gifStats(${keys.join(", ")}) VALUES(${valueTemplate})`, values);
+                } catch (e) {
+                    Logger.error(Tracker.TAG, "Unexpected error while interting TrackingItem", e);
+                }
+            }
+        } catch (e) {
+            Logger.error(Tracker.TAG, "Unexpected error while processing tracking queue", e);
+        }
     }
 
-    public static trackNewIncomingGif(type: ItemTypes, domain: string): void {
-        // A valid gif link was found with that domain in that type
-        // GIF_SUBREDDIT / GIF_COMMENT / GIF_LINK / GIF_INBOX / GIF_DOMAIN
-        // Increase total count for type
-        // Increase count for subreddit
-        // Increase count for domain
+    private applyItemLocationCounts(db: IORedis.Pipeline, key: string, counts: ItemLocationCounts) {
+        for (const [k, v] of Object.entries(counts)) {
+            db.hincrby(key, k, v);
+        }
     }
 
-    public static trackGifAlreadyCached(type: ItemTypes): void {
-        // A gif link was already in cache and no additional data had to be fetched
-        // GIF_IN_CACHE
-        // Increase total count for type
+    private queueInterval() {
+        if (!this.loopInterval) {
+            this.loopInterval = setInterval(this.loop, 60000); // TODO Might do that more often?
+        }
     }
 
-    public static trackItemError(type: ItemTypes): void {
-        // An error occurred while processing a specific item
+    public static trackNewIncomingItem(type: ItemTypes): void {
+        switch (type) {
+            case ItemTypes.SUBMISSION:
+                updateQueue.allSubmissionsCount++;
+                break;
+            case ItemTypes.COMMENT:
+                updateQueue.allCommentsCount++;
+                break;
+            case ItemTypes.INBOX:
+                updateQueue.allInboxCount++;
+                break;
+            default:
+                Logger.warn(Tracker.TAG, `trackNewIncomingItem: Unknown item type '${type}'`);
+                break;
+        }
     }
 
-    public static trackGeneralError(error: Error): void {
-        // An error occurred while doing work outside of specific items
-    }
-
-    public static trackNewItem(type: ItemTypes, gifUrl: URL2, redditId: string, subreddit: string | null, timeCreated: Date, timeStart: Date = new Date()): ItemTracker { // tslint:disable-line max-line-length
+    public static trackNewGifItem(type: ItemTypes, gifUrl: URL2, redditId: string, subreddit: string | undefined, timeCreated: Date, timeStart: Date = new Date()): ItemTracker { // tslint:disable-line max-line-length
+        const host = gifUrl.hostname;
+        updateQueue.domainCounts[host] = (updateQueue.domainCounts[host] || 0) + 1;
+        const sub = subreddit as string;
+        switch (type) {
+            case ItemTypes.SUBMISSION:
+                updateQueue.totalGifSubmissions++;
+                updateQueue.subredditGifSubmissionCounts[sub] = (updateQueue.subredditGifSubmissionCounts[sub] || 0) + 1;
+                break;
+            case ItemTypes.COMMENT:
+                updateQueue.totalGifComments++;
+                updateQueue.subredditGifCommentCounts[sub] = (updateQueue.subredditGifCommentCounts[sub] || 0) + 1;
+                break;
+            case ItemTypes.INBOX:
+                updateQueue.totalGifInbox++;
+                break;
+            default:
+                Logger.warn(Tracker.TAG, `trackNewItem: Unknown item type '${type}'`);
+                break;
+        }
         return new ItemTracker(type, gifUrl, redditId, subreddit, timeCreated, timeStart);
     }
 
-    // Tracking methods should purely be statistical data and not affect anything
-    // TODO:
-    //  - Track gif stats, including sizes, subreddits and upload times. Also include errors? In GIF_PROCESSED.
-    //  - Process and track errors - separate into different error types somewhere
-    //  - deferCount/deferFails - part of stats?
-    //  * Those stats should probably be stored somewhere other than Redis. A dedicated table or let zabbix/grafana take care of that?
-    // TODO make this a sync method that adds tracking data to a queue that is periodically processed
-    public async track(type: TrackTypes, ...args: any): Promise<void> {
-        switch (type) {
-
-            // Args - count?: number
-            // case TrackTypes.NEW_SUBMISSION:
-            // case TrackTypes.NEW_COMMENT:
-            // case TrackTypes.NEW_INBOX:
-            // case TrackTypes.GIF_LINK:
-            // case TrackTypes.GIF_INBOX:
-            case TrackTypes.GIF_UPLOADED:
-                // case TrackTypes.GIF_IN_CACHE:
-                if (args[0] !== undefined && Number.isNaN(+args[0])) {
-                    throw new Error(`Invalid arguments for tracking type '${type}': '${args[0]}' is not a number or undefined`);
-                }
-                await this.db.incrby(TrackKeys[type], args[0] || 1);
-                break;
-
-                // Args - domain/subreddit?: string
-                // case TrackTypes.GIF_DOMAIN:
-                // case TrackTypes.GIF_SUBREDDIT:
-                // case TrackTypes.GIF_COMMENT:
-                if (typeof args[0] !== "string") {
-                    throw new Error(`Invalid arguments for tracking type '${type}': '${args[0]}' is not a string`);
-                }
-                await this.db.hincrby(TrackKeys[type], args[0], 1);
-                break;
-
-            // Args -
-            // case TrackTypes.ERROR:
-            case TrackTypes.GIF_PROCESSED:
-                // Implement those
-                break;
-
-            default:
-                throw new Error(`Unknown tracking type: '${type}'`);
+    public static ensureTrackingEnded(tracker: ItemTracker): void {
+        if (!tracker.trackingEnded) {
+            Logger.error(Tracker.TAG, `[${tracker.redditId}] Tracker was not ended properly! Aborting tracking.`);
+            tracker.endTracking(TrackingStatus.ERROR, { errorCode: TrackingItemErrorCodes.TRACKER_NOT_ENDED });
         }
     }
 
 }
 
-class ItemTracker {
+export class ItemTracker {
 
     private data: Partial<TrackingItemEntry>;
+    private trackingStopped: boolean = false;
 
-    constructor(type: ItemTypes, gifUrl: URL2, redditId: string, subreddit: string | null, timeCreated: Date, timeStart: Date = new Date()) {
+    constructor(type: ItemTypes, gifUrl: URL2, redditId: string, subreddit: string | undefined, timeCreated: Date, timeStart: Date = new Date()) {
         this.data = {
             itemType: type,
             timestampCreated: timeCreated,
@@ -259,18 +231,37 @@ class ItemTracker {
     }
 
     public endTracking(status: TrackingStatus, finalUpdates?: Partial<TrackingItemEntry>, timestampEnd: Date = new Date()): void {
+        if (this.trackingStopped) {
+            throw new Error(`Already ended tracking for item ${this.data.redditId}`);
+        }
+        this.trackingStopped = true;
         if (finalUpdates) {
             this.updateData(finalUpdates);
         }
         const data = this.data as TrackingItemEntry;
         data.status = status;
         data.timestampEnd = timestampEnd;
-        Logger.verbose("Tracker", `[${data.redditId}] Status: ${data.status} | GIF: ${getReadableFileSize(data.gifSize) || "-"} | MP4: ${getReadableFileSize(data.mp4Size) || "-"} | WebM: ${getReadableFileSize(data.webmSize) || "-"} | UploadTime: ${data.uploadTime || "-"} | ProcessingTime: ${+data.timestampEnd - +data.timestampStart} | Cached: ${data.fromCache === null || data.fromCache === undefined ? "-" : data.fromCache}`); // tslint:disable-line
-        // TODO Push in queue to put into DB
+        Logger.verbose("Tracker", `[${data.redditId}] Status: ${data.status} | GIF: ${getReadableFileSize(data.gifSize) || "-"} | ` +
+            `MP4: ${getReadableFileSize(data.mp4Size) || "-"} | WebM: ${getReadableFileSize(data.webmSize) || "-"} | ` +
+            `UploadTime: ${data.uploadTime || "-"} | ProcessingTime: ${+data.timestampEnd - +data.timestampStart} | ` +
+            `Cached: ${data.fromCache === null || data.fromCache === undefined ? "-" : data.fromCache}`);
+        updateQueue.trackingItems.push(data);
     }
 
     public abortTracking(): void {
+        if (this.trackingStopped) {
+            throw new Error(`Already ended tracking for item ${this.data.redditId}`);
+        }
+        this.trackingStopped = true;
         // whelp
+    }
+
+    public get trackingEnded() {
+        return this.trackingStopped;
+    }
+
+    public get redditId() {
+        return this.data.redditId;
     }
 
 }

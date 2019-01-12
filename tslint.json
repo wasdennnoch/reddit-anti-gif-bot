@@ -5,6 +5,7 @@
     ],
     "jsRules": {},
     "rules": {
+        "align": [true, "statements"],
         "arrow-parens": [true, "ban-single-arg-parens"],
         "interface-name": false,
         "max-classes-per-file": false,

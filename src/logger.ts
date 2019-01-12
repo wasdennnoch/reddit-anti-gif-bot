@@ -1,3 +1,5 @@
+const debug = process.env.NODE_ENV !== "production";
+
 enum LogLevels {
     VERBOSE,
     DEBUG,
@@ -30,7 +32,6 @@ const availableColors = [
 let nextColor = 0;
 const availableColorsCount = Object.keys(availableColors).length;
 
-// TODO Give every post ID an individual semi-random color for easy identification? And color log levels.
 export default class Logger {
 
     public static verbose(tag: string, message: string, error?: Error): void {
@@ -60,10 +61,21 @@ export default class Logger {
 
     private static log(level: LogLevels, tag: string, message: string, error?: Error): void {
         const l = Logger.getColoredLevelName(level);
-        let m = message;
-        if (idRegex.test(message)) {
-            const bracketIndex = message.indexOf("]");
-            const id = message.substring(1, bracketIndex);
+        console.log(`[${new Date().toISOString()}] ${l}/${tag}: ${Logger.colorMessage(message)}`, error || ""); // tslint:disable-line no-console
+    }
+
+    private static getColoredLevelName(level: LogLevels): string {
+        if (!debug) {
+            return LevelNames[level];
+        }
+        const c = LevelColors[level];
+        return `${c[0]}${LevelNames[level]}${c[1]}`;
+    }
+
+    private static colorMessage(msg: string): string {
+        if (debug && idRegex.test(msg)) {
+            const bracketIndex = msg.indexOf("]");
+            const id = msg.substring(1, bracketIndex);
             let col = colorMap.get(id);
             if (col === undefined) {
                 col = nextColor;
@@ -75,14 +87,9 @@ export default class Logger {
                 }
             }
             const color = availableColors[col];
-            m = `${color[0]}[${id}]${color[1]}${message.substring(bracketIndex + 1)}`;
+            return `${color[0]}[${id}]${color[1]}${msg.substring(bracketIndex + 1)}`;
         }
-        console.log(`[${new Date().toISOString()}] ${l}/${tag}: ${m}`, error || ""); // tslint:disable-line no-console
-    }
-
-    private static getColoredLevelName(level: LogLevels): string {
-        const c = LevelColors[level];
-        return `${c[0]}${LevelNames[level]}${c[1]}`;
+        return msg;
     }
 
 }

@@ -1,4 +1,6 @@
 import IORedis = require("ioredis");
+import { Client } from "pg";
+import Logger from "../logger";
 
 export interface GifCacheItem {
     mp4Link: string;
@@ -59,58 +61,68 @@ interface ReplyTemplate {
 */
 export default class Database {
 
-    private readonly db: IORedis.Redis;
+    private static readonly TAG = "Database";
 
-    private ingestSourceOrder: string[];
-    private gifSizeThreshold: number;
-    private replyTemplates: ReplyTemplates;
+    private readonly redis: IORedis.Redis;
+    private readonly postgres: Client;
 
     public constructor() {
-        this.db = new IORedis({
+        this.redis = new IORedis({
             lazyConnect: true,
             keyPrefix: "gif-",
             connectionName: "anti-gif-bot",
             showFriendlyErrorStack: process.env.NODE_ENV !== "production",
         });
-        this.ingestSourceOrder = [];
-        this.gifSizeThreshold = 0xDEADBEEF; // 3.5 GB :P
-        this.replyTemplates = {} as ReplyTemplates;
+        this.postgres = new Client();
     }
 
     public async init() {
-        await this.db.connect();
+        await this.redis.connect();
+        await this.postgres.connect();
         await this.setupDB();
-        await this.fetchConfig(); // TODO Periodically refresh
     }
 
-    public getIngestSourceOrder(): string[] {
-        return this.ingestSourceOrder;
+    public get redisRaw(): IORedis.Redis {
+        return this.redis;
     }
 
-    public getGifSizeThreshold(): number {
-        return this.gifSizeThreshold;
+    public get postgresRaw(): Client {
+        return this.postgres;
     }
 
-    public getReplyTemplates(): ReplyTemplates {
-        return this.replyTemplates;
+    public async getIngestSourceOrder(): Promise<string[]> {
+        return JSON.parse(await this.redis.get("ingestSourceOrder") || "[]");
+    }
+
+    public async getGifSizeThreshold(): Promise<number> {
+        return +(await this.redis.get("gifSizeThreshold") || 2_000_000);
+    }
+
+    // TODO May be a bit better to turn this into a hash with the fields gifPost|gifComment
+    public async getReplyTemplates(): Promise<ReplyTemplates> {
+        return JSON.parse(await this.redis.get("replyTemplates") || "{}");
+    }
+
+    public async getMp4BiggerAllowedDomains(): Promise<string[]> {
+        return JSON.parse(await this.redis.get("mp4BiggerAllowedDomains") || "[]");
     }
 
     public async getCachedLink(gifUrl: string): Promise<GifCacheItem | null> {
         let res;
-        if ((res = await this.db.get(`cache-${gifUrl}`)) !== null) {
+        if ((res = await this.redis.get(`cache-${gifUrl}`)) !== null) {
             return JSON.parse(res);
         }
         return null;
     }
 
     public async cacheLink(gifUrl: string, item: GifCacheItem): Promise<void> {
-        await this.db.set(`cache-${gifUrl}`, JSON.stringify(item), "EX", 60 * 60 * 24 * 7); // 7 days
+        await this.redis.set(`cache-${gifUrl}`, JSON.stringify(item), "EX", 60 * 60 * 24 * 7); // 7 days
     }
 
     // TODO duration is never checked anywhere to expire
     // tslint:disable-next-line:max-line-length
     public async addException(type: ExceptionTypes, location: string, source: ExceptionSources, reason: string | null, timestamp: number, duration?: number): Promise<void> {
-        await this.db.hset("exceptions", `${type}-${location}`, JSON.stringify({
+        await this.redis.hset("exceptions", `${type}-${location}`, JSON.stringify({
             source,
             reason: reason || null,
             timestamp,
@@ -123,12 +135,12 @@ export default class Database {
         if (type) {
             let cursor = 0;
             do {
-                const res = await this.db.hscan("exceptions", cursor, "MATCH", `${type.replace(/\?\*\[\]\^\-/g, "\\$&")}-*`, "COUNT", 100);
+                const res = await this.redis.hscan("exceptions", cursor, "MATCH", `${type.replace(/\?\*\[\]\^\-/g, "\\$&")}-*`, "COUNT", 100);
                 cursor = res[0];
                 exceptions.push(...res[1]);
             } while (cursor !== 0);
         } else {
-            exceptions = await this.db.hgetall("exceptions");
+            exceptions = await this.redis.hgetall("exceptions");
         }
         const previousFields = new Map<string, boolean>();
         const finalData: ExceptionData[] = [];
@@ -155,7 +167,7 @@ export default class Database {
     }
 
     public async getExceptions(): Promise<ExceptionList> {
-        const keys = await this.db.hkeys("exceptions") as string[];
+        const keys = await this.redis.hkeys("exceptions") as string[];
         const res = {
             [ExceptionTypes.SUBREDDIT]: [],
             [ExceptionTypes.USER]: [],
@@ -169,23 +181,23 @@ export default class Database {
     }
 
     public async getExceptionCount(): Promise<number> {
-        return this.db.hlen("exceptions");
+        return this.redis.hlen("exceptions");
     }
 
     public async isException(type: ExceptionTypes, location: string): Promise<boolean> {
-        return Boolean(await this.db.hexists("exceptions", `${type}-${location}`));
+        return Boolean(await this.redis.hexists("exceptions", `${type}-${location}`));
     }
 
     public async removeException(type: ExceptionTypes, location: string): Promise<void> {
-        await this.db.hdel("exceptions", `${type}-${location}`);
+        await this.redis.hdel("exceptions", `${type}-${location}`);
     }
 
     private async setupDB() {
-        if (!await this.db.get("setup")) {
-            await this.db.set("setup", true);
-            await this.db.set("ingestSourceOrder", '["snoowrap"]');
-            await this.db.set("gifSizeThreshold", 2_000_000);
-            await this.db.set("replyTemplates", JSON.stringify({
+        if (!await this.redis.get("setup")) {
+            await this.redis.set("setup", true);
+            await this.redis.set("ingestSourceOrder", '["snoowrap"]');
+            await this.redis.set("gifSizeThreshold", 2_000_000);
+            await this.redis.set("replyTemplates", JSON.stringify({
                 gifPost: {
                     base: "",
                     parts: {
@@ -200,21 +212,6 @@ export default class Database {
                 },
             }));
         }
-    }
-
-    private async fetchConfig() {
-        const [
-            ingestSourceOrder,
-            gifSizeThreshold,
-            replyTemplates,
-        ] = await Promise.all([
-            this.db.get("ingestSourceOrder"),
-            this.db.get("gifSizeThreshold"),
-            this.db.get("replyTemplates"),
-        ]);
-        this.ingestSourceOrder = JSON.parse(ingestSourceOrder || "[]");
-        this.gifSizeThreshold = +(gifSizeThreshold || 2_000_000);
-        this.replyTemplates = JSON.parse(replyTemplates || "{}");
     }
 
 }
