@@ -45,7 +45,7 @@ export default class BotUtils {
         if (!["http:", "https:"].includes(url.protocol) || !url.hostname.includes(".") || !url.pathname) {
             return false;
         }
-        if (/\.gif?$/.test(url.pathname)) {
+        if (/\.gif$/.test(url.pathname)) {
             return true;
         }
         if (url.domain === "giphy.com" && url.pathname.startsWith("/gifs/") && !url.pathname.endsWith(".mp4")) {

@@ -130,7 +130,7 @@ export default class AntiGifBot {
         ]);
         if (isSubredditException || isDomainException || isUserException) {
             if (!isDomainException) {
-                // To still track gif sizes
+                // Still track gif sizes
                 await gifConverter.getItemData(false);
             }
             return tracker.endTracking(TrackingStatus.IGNORED);

@@ -74,9 +74,9 @@ export default class GifConverter {
         }
         await this.generateMp4Url();
         if (!this.mp4Url && uploadIfNecessary) {
-            await this.uploadGif(this.itemLink);
+            await this.uploadGif();
         } else {
-            Logger.debug(GifConverter.TAG, `[${this.itemId}] Not uploading gif, no mp4 data available`);
+            Logger.debug(GifConverter.TAG, `[${this.itemId}] Not uploading gif, no mp4 data will be available`);
             return null;
         }
         this.tracker.updateData({ mp4Link: this.mp4Url!.href });
@@ -231,7 +231,7 @@ export default class GifConverter {
 
     private async tryTransformToMp4Url(url: URL2): Promise<URL2 | null> {
         if (["i.giphy.com", "i.gyazo.com", "media.tumblr.com", "i.makeagif.com", "j.gifs.com"].includes(url.hostname)) {
-            return new URL2(url.href.replace(/\.gif?$/, ".mp4"));
+            return new URL2(url.href.replace(/\.gif$/, ".mp4"));
         }
         if (url.domain === "gfycat.com") {
             return new URL2(url.href.replace(/(thumbs|giant|fat|zippy)\./, "")
@@ -359,12 +359,12 @@ export default class GifConverter {
         }
     }
 
-    private async uploadGif(descriptionLink: string): Promise<void> {
+    private async uploadGif(): Promise<void> {
         Logger.debug(GifConverter.TAG, `[${this.itemId}] Uploading GIF...`);
         const startTime = Date.now();
         const uploadResult = await gfycat.upload({
             fetchUrl: this.directGifUrl.href,
-            title: `Automatically uploaded gif from ${descriptionLink} (by /u/anti-gif-bot)`,
+            title: `Automatically uploaded gif from ${this.itemLink} (by /u/anti-gif-bot)`,
             nsfw: this.nsfw ? "1" : "0",
         });
         for (let retryCount = 0; retryCount < 300; retryCount++) { // MAGIC
