@@ -35,8 +35,9 @@ export default class GifConverter {
     private gifUrlCheck?: UrlCheckResult | null;
     private mp4UrlCheck?: UrlCheckResult | null;
     private itemData?: GifCacheItem | null;
+    private ignoreItemBasedOnCache: boolean = false;
 
-    constructor(readonly db: Database, readonly gifUrl: URL2, readonly itemId: string, readonly nsfw: boolean,
+    constructor(readonly db: Database, readonly gifUrl: URL2, readonly itemId: string, readonly itemLink: string, readonly nsfw: boolean,
         readonly tracker: ItemTracker, readonly submission?: Submission) {
         this.directGifUrl = gifUrl;
     }
@@ -48,36 +49,43 @@ export default class GifConverter {
         }
     }
 
-    public async getItemData(): Promise<GifCacheItem | null> {
-        // TODO would also make sense to cache that a link should not be fetched again?
+    public async getItemData(uploadIfNecessary: boolean = true): Promise<GifCacheItem | null> {
         await this.init();
         await this.fetchCachedLink();
         if (this.itemData) {
             await this.trackCachedLink();
             return this.itemData;
+        } else if (this.ignoreItemBasedOnCache) {
+            return null;
         }
         this.tracker.updateData({ fromCache: false });
         await this.fetchGifUrlInfo();
         if (!this.gifUrlCheck) {
+            await this.saveErrorToCache();
             return null;
         }
         // TODO Try to download when it is null?
         if (this.gifUrlCheck.contentLength !== null) {
             this.tracker.updateData({ gifSize: this.gifUrlCheck.contentLength });
             if (!await this.compareGifSizeThreshold(this.gifUrlCheck.contentLength)) {
+                await this.saveErrorToCache();
                 return null;
             }
         }
         await this.generateMp4Url();
+        if (!this.mp4Url && uploadIfNecessary) {
+            await this.uploadGif(this.itemLink);
+        } else {
+            Logger.debug(GifConverter.TAG, `[${this.itemId}] Not uploading gif, no mp4 data available`);
+            return null;
+        }
         this.tracker.updateData({ mp4Link: this.mp4Url!.href });
         if (this.mp4Url!.hostname === "gfycat.com") {
             await this.fetchMp4InfoFromGfycat();
         } else {
             await this.fetchMp4UrlInfo();
-            if (!this.mp4UrlCheck) {
-                return null;
-            }
-            if (!await this.checkMp4ContentLength()) {
+            if (!this.mp4UrlCheck || !await this.checkMp4ContentLength()) {
+                await this.saveErrorToCache();
                 return null;
             }
             await this.saveItemDataFromMp4Fetch();
@@ -91,7 +99,30 @@ export default class GifConverter {
 
     private async fetchCachedLink(): Promise<void> {
         const gifUrl = this.directGifUrl;
-        this.itemData = await this.db.getCachedLink(gifUrl.href);
+        const itemData = await this.db.getCachedLink(gifUrl.href);
+        if (itemData === "err") {
+            this.ignoreItemBasedOnCache = true;
+        } else {
+            this.itemData = itemData;
+        }
+    }
+
+    private async saveErrorToCache(): Promise<void> {
+        await this.db.cacheLink(this.directGifUrl.href, "err");
+    }
+
+    private async saveItemDataFromMp4Fetch(): Promise<void> {
+        if (!this.gifUrlCheck || !this.mp4UrlCheck || this.mp4UrlCheck.contentLength === null) {
+            throw new Error("Trying to set item data without gif info or mp4 info or mp4 content length");
+        }
+        this.itemData = {
+            mp4Link: this.mp4Url!.href,
+            // TODO I _assume_ that if it's not uploaded it's from a known host which provides a length header.
+            // What if no header is there unexpectedly?
+            gifSize: this.gifUrlCheck.contentLength || -1,
+            mp4Size: this.mp4UrlCheck.contentLength,
+        };
+        await this.db.cacheLink(this.directGifUrl.href, this.itemData);
     }
 
     private async trackCachedLink(): Promise<void> {
@@ -120,7 +151,7 @@ export default class GifConverter {
     }
 
     private async generateMp4Url(): Promise<void> {
-        this.mp4Url = await this.tryTransformToMp4Url(this.directGifUrl) || await this.uploadGif(`https://redd.it/${this.itemId}`);
+        this.mp4Url = await this.tryTransformToMp4Url(this.directGifUrl) || undefined;
     }
 
     private async fetchMp4InfoFromGfycat(): Promise<void> {
@@ -132,10 +163,10 @@ export default class GifConverter {
             gfyId: this.mp4Url.pathname.slice(1),
         });
         const item = details.gfyItem;
-        // TODO Apparently gfyItem.gifSize is null sometimes
         Logger.debug(GifConverter.TAG, `[${this.itemId}] Gfycat info returned gifSize ${item.gifSize}, previous HEAD was ${gifContentLength}`);
         this.itemData = {
             mp4Link: this.mp4Url.href,
+            // TODO Apparently gfyItem.gifSize is null sometimes
             gifSize: item.gifSize || gifContentLength || -1,
             mp4Size: item.mp4Size,
             webmSize: item.webmSize,
@@ -159,20 +190,6 @@ export default class GifConverter {
         }
         Logger.debug(GifConverter.TAG, `[${this.itemId}] MP4 link identified with size ${this.mp4UrlCheck.contentLength}`);
         return true;
-    }
-
-    private async saveItemDataFromMp4Fetch(): Promise<void> {
-        if (!this.gifUrlCheck || !this.mp4UrlCheck || this.mp4UrlCheck.contentLength === null) {
-            throw new Error("Trying to set item data without gif info or mp4 info or mp4 content length");
-        }
-        this.itemData = {
-            mp4Link: this.mp4Url!.href,
-            // TODO I _assume_ that if it's not uploaded it's from a known host which provides a length header.
-            // What if no header is there unexpectedly?
-            gifSize: this.gifUrlCheck.contentLength || -1,
-            mp4Size: this.mp4UrlCheck.contentLength,
-        };
-        await this.db.cacheLink(this.directGifUrl.href, this.itemData);
     }
 
     // Some URLs embed gifs but aren't actually the direct link to the gif.
@@ -213,14 +230,14 @@ export default class GifConverter {
     }
 
     private async tryTransformToMp4Url(url: URL2): Promise<URL2 | null> {
-        let submission = this.submission;
         if (["i.giphy.com", "i.gyazo.com", "media.tumblr.com", "i.makeagif.com", "j.gifs.com"].includes(url.hostname)) {
-            return new URL2(url.href.replace(/\.gif$/, ".mp4"));
+            return new URL2(url.href.replace(/\.gif?$/, ".mp4"));
         }
         if (url.domain === "gfycat.com") {
-            return new URL2(url.href.replace(/thumbs\.|giant\.|fat\.|zippy\./, "")
+            return new URL2(url.href.replace(/(thumbs|giant|fat|zippy)\./, "")
                 .replace(/(-size_restricted|-small|-max-14?mb|-100px)?(\.gif)$/, ""));
         }
+        let submission = this.submission;
         if (url.hostname === "i.redd.it" && submission) {
             // Reddit also provides their own mp4 preview but it's part of the sumbission object
             // (can't guess "random" URLs) and may not always be there in time (or ever)
@@ -229,12 +246,13 @@ export default class GifConverter {
                     const mp4Link = submission.preview.images[0].variants.mp4.source.url; // Thanks Reddit
                     return new URL2(mp4Link);
                 } catch {
-                    Logger.debug(GifConverter.TAG, `[${submission.id}] No reddit mp4 preview found, ${retryCount < 20 ? "retrying" : "aborting"}`); // MAGIC
+                    Logger.debug(GifConverter.TAG, `[${submission.id}] No reddit mp4 preview found, ${retryCount + 1 < 20 ? "retrying" : "aborting"}`); // MAGIC
                     // ignore and try again
                 }
-                // TODO don't delay if retry limit is reached
-                await delay(15000); // MAGIC
-                submission = await (submission.refresh() as Promise<any>) as Submission; // TS shenanigans
+                if (retryCount + 1 < 20) { // MAGIC
+                    await delay(15000); // MAGIC
+                    submission = await (submission.refresh() as Promise<any>) as Submission; // TS shenanigans
+                }
             }
             return null;
         }
@@ -275,7 +293,7 @@ export default class GifConverter {
                     });
                     return null;
                 } else {
-                    Logger.debug(GifConverter.TAG, `[${this.itemId}] Got 404 url status, ${retryCount < maxRetryCount ? "retrying" : "aborting"}`); // MAGIC
+                    Logger.debug(GifConverter.TAG, `[${this.itemId}] Got 404 url status, ${retryCount + 1 < maxRetryCount ? "retrying" : "aborting"}`); // MAGIC
                 }
             }
             if (!linkData.expectedType) {
@@ -289,7 +307,7 @@ export default class GifConverter {
             }
             if (linkData) {
                 return linkData;
-            } else {
+            } else if (retryCount + 1 < maxRetryCount) {
                 await delay(15000); // MAGIC
             }
         }
@@ -308,7 +326,15 @@ export default class GifConverter {
                 .setFollowCount(4)
                 .setTimeout(10000)
                 .toBuffer()
-                .catch(e => e); // TODO IMPORTANT remove when chainfetch is updated
+                .catch(e => {
+                    // Chainfetch throws an error if the status code is not okay which is not what I want
+                    // (and it's not what node-fetch does). So, check if it's a bad status code and if so don't throw.
+                    // TODO Remove when chainfetch is updated
+                    if (e.status && !e.ok) {
+                        return e;
+                    }
+                    throw e;
+                });
             const contentType = res.headers.get("content-type") || res.headers.get("X-Archive-Orig-content-type");
             const contentLength = res.headers.get("content-length") || res.headers.get("X-Archive-Orig-content-length");
             return {
@@ -333,7 +359,7 @@ export default class GifConverter {
         }
     }
 
-    private async uploadGif(descriptionLink: string): Promise<URL2> {
+    private async uploadGif(descriptionLink: string): Promise<void> {
         Logger.debug(GifConverter.TAG, `[${this.itemId}] Uploading GIF...`);
         const startTime = Date.now();
         const uploadResult = await gfycat.upload({
@@ -350,7 +376,8 @@ export default class GifConverter {
                 });
                 const gfyLink = `https://gfycat.com/${result.gfyname}`;
                 Logger.debug(GifConverter.TAG, `[${this.itemId}] Uploaded GIF in ${uploadTime} ms, available at ${gfyLink}`);
-                return new URL2(gfyLink);
+                this.mp4Url = new URL2(gfyLink);
+                return;
             } else if (result.task === "encoding") {
                 await delay(2000); // MAGIC
             } else {

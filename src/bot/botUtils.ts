@@ -1,15 +1,22 @@
-import Database, { GifCacheItem } from "../db";
-import { getReadableFileSize, toFixedFixed, version } from "../utils";
+import { ReplyableContent } from "snoowrap";
+import Database, { ExceptionSources, ExceptionTypes, GifCacheItem } from "../db";
+import { ItemTracker, TrackingItemErrorCodes, TrackingStatus } from "../db/tracker";
+import Logger from "../logger";
+import { delay, getReadableFileSize, toFixedFixed, version } from "../utils";
 import URL2 from "./url2";
 
 export default class BotUtils {
 
+    private static readonly TAG = "BotUtils";
+
     constructor(readonly db: Database) { }
 
-    public async assembleReply(itemData: GifCacheItem, subreddit: string | "dm"): Promise<string> {
+    public async assembleReply(url: URL2, itemData: GifCacheItem, subreddit: string | "dm"): Promise<string> {
         const mp4BiggerThanGif = itemData.mp4Size > itemData.gifSize;
         const webmBiggerThanMp4 = itemData.webmSize !== undefined && itemData.webmSize > itemData.mp4Size;
         const savings = this.calculateSavings(itemData.gifSize, itemData.mp4Size, itemData.webmSize);
+        const possiblyNoisy = (await this.db.getPossiblyNoisyDomains()).includes(url.domain);
+        const temporaryGif = (await this.db.getTemporaryGifDomains()).includes(url.domain);
         const replyTemplates = (await this.db.getReplyTemplates()).gifPost; // MAGIC (gifPost)
         const replyPartsDefault = replyTemplates.parts.default;
         const replyPartsSpecific = replyTemplates.parts[subreddit];
@@ -18,6 +25,8 @@ export default class BotUtils {
             .replace("{{sizeComparisonText}}", mp4BiggerThanGif ? replyParts.mp4BiggerThanGif : replyParts.gifBiggerThanMp4)
             .replace("{{webmSmallerText}}", !webmBiggerThanMp4 ? replyParts.webmSmallerText : "")
             .replace("{{gfycatNotice}}", itemData.webmSize !== undefined ? replyParts.gfycatNotice : "")
+            .replace("{{noiseWarning}}", possiblyNoisy ? replyParts.noiseWarning : "")
+            .replace("{{temporaryGifWarning}}", temporaryGif ? replyParts.temporaryGifWarning : "")
             .replace("{{linkContainer}}", replyParts[`linkContainer${itemData.webmSize !== undefined ? "Mirror" : "Link"}`])
             .replace("{{gifSize}}", getReadableFileSize(itemData.gifSize))
             .replace("{{mp4Size}}", getReadableFileSize(itemData.mp4Size))
@@ -26,7 +35,6 @@ export default class BotUtils {
             .replace("{{webmSave}}", String(savings.webmSave || ""))
             .replace("{{version}}", version)
             .replace("{{link}}", itemData.mp4Link);
-        // TODO Keep this or not?
         for (const [k, v] of Object.entries(replyParts)) {
             replyText = replyText.replace(`{{${k}}}`, v || "");
         }
@@ -37,13 +45,55 @@ export default class BotUtils {
         if (!["http:", "https:"].includes(url.protocol) || !url.hostname.includes(".") || !url.pathname) {
             return false;
         }
-        if (url.pathname.endsWith(".gif")) {
+        if (/\.gif?$/.test(url.pathname)) {
             return true;
         }
         if (url.domain === "giphy.com" && url.pathname.startsWith("/gifs/") && !url.pathname.endsWith(".mp4")) {
             return true;
         }
         return false;
+    }
+
+    // tslint:disable-next-line:max-line-length
+    public async createReplyAndReply(mp4Url: URL2, itemData: GifCacheItem, replyTo: ReplyableContent<any>, tracker: ItemTracker, itemId: string, subreddit: string): Promise<void> {
+        const replyText = await this.assembleReply(mp4Url, itemData, subreddit);
+        await this.doReply(replyTo, replyText, tracker, itemId, subreddit);
+    }
+
+    public async doReply(replyTo: ReplyableContent<any>, replyText: string, tracker: ItemTracker, itemId: string, subreddit: string): Promise<void> {
+        try {
+            Logger.debug(BotUtils.TAG, `[${itemId}] Reply in ${subreddit}: ${replyText.substring(0, 150).replace(/\r?\n/g, "-\\n-")}...`);
+            if (process.env.NODE_ENV === "production") {
+                await (replyTo.reply(replyText) as Promise<any>); // TS shenanigans
+            } else if (Math.random() < 0.1) {
+                // For debugging purposes pretend that replies sometimes fail due to rate limits
+                this.debugThrowRateLimitError();
+            }
+            return tracker.endTracking(TrackingStatus.SUCCESS);
+        } catch (err) {
+
+            if (err.name === "StatusCodeError" && err.statusCode === 403 && err.error.message === "Forbidden") {
+                // Unexpected Ban
+                Logger.info(BotUtils.TAG, `[${itemId}] Reply: Unexpectedly banned in ${subreddit}`);
+                await this.db.addException(ExceptionTypes.SUBREDDIT, subreddit, ExceptionSources.BAN_ERROR, null, Date.now());
+                return tracker.endTracking(TrackingStatus.ERROR, {
+                    errorCode: TrackingItemErrorCodes.REPLY_BAN,
+                });
+
+            } else if (err.message && /^RATELIMIT,/.test(err.message)) {
+                // Rate Limit: Parse time to wait...
+                const waitTime = this.parseWaitTimeFromRateLimit(err.message);
+                Logger.debug(BotUtils.TAG, `[${itemId}] Reply: Got rate limited, waiting ${waitTime} ms`);
+                delay(waitTime);
+                // ...and try to reply again
+                return await this.doReply(replyTo, replyText, tracker, itemId, subreddit);
+            }
+
+            Logger.warn(BotUtils.TAG, `[${itemId}] Reply: Unknown error occurred`, err);
+            return tracker.endTracking(TrackingStatus.ERROR, {
+                errorCode: TrackingItemErrorCodes.REPLY_FAIL,
+            });
+        }
     }
 
     private calculateSavings(gifSize: number, mp4Size: number, webmSize?: number): {
@@ -59,6 +109,26 @@ export default class BotUtils {
             mp4Save,
             webmSave,
         };
+    }
+
+    private parseWaitTimeFromRateLimit(message: string): number {
+        const timeString = message.slice(52, -11);
+        const [numString, unitString] = timeString.split(" ");
+        const timeScale = /seconds?/.test(unitString) ? 1000 : /minutes?/.test(unitString) ? 1000 * 60 : null;
+        if (!timeScale) {
+            throw new Error(`Unknown reply rate limit time '${timeString}' returned by reddit`);
+        }
+        return (+numString + 1) * timeScale;
+    }
+
+    private debugThrowRateLimitError(): void {
+        let num = Math.floor(Math.random() * 59 + 1);
+        let unit = "seconds";
+        if (Math.random() < 0.2) {
+            num = Math.floor(Math.random() * 2 + 1);
+            unit = "minutes";
+        }
+        throw new Error(`RATELIMIT,you are doing that too much. try again in ${num} ${unit}.,ratelimit`);
     }
 
 }

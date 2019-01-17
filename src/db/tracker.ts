@@ -85,13 +85,13 @@ export default class Tracker {
 
     private static readonly TAG = "Tracker";
 
-    private loopInterval?: NodeJS.Timeout;
+    private loopTimeout?: NodeJS.Timeout;
 
     constructor(readonly db: Database) {
         this.loop = this.loop.bind(this);
 
         this.clearQueue();
-        this.queueInterval();
+        this.queueLoop();
     }
 
     private clearQueue() {
@@ -110,21 +110,20 @@ export default class Tracker {
     }
 
     private async loop() {
-        Logger.verbose(Tracker.TAG, "Pushing new queue items to DB");
         try {
             const queue = updateQueue;
             this.clearQueue();
-            const db = this.db.redisRaw.pipeline(); // Or .multi() ?
-            db.incrby("allSubmissionsCount", queue.allSubmissionsCount);
-            db.incrby("allCommentsCount", queue.allCommentsCount);
-            db.incrby("allInboxCount", queue.allInboxCount);
-            db.incrby("totalGifSubmissions", queue.totalGifSubmissions);
-            db.incrby("totalGifComments", queue.totalGifComments);
-            db.incrby("totalGifInbox", queue.totalGifInbox);
-            this.applyItemLocationCounts(db, "gifDomainStats", queue.domainCounts);
-            this.applyItemLocationCounts(db, "gifSubredditStats", queue.subredditGifSubmissionCounts);
-            this.applyItemLocationCounts(db, "gifCommentSubredditStats", queue.subredditGifCommentCounts);
-            await db.exec();
+            const redisPipeline = this.db.redisRaw.pipeline(); // Or .multi() ?
+            redisPipeline.incrby("allSubmissionsCount", queue.allSubmissionsCount);
+            redisPipeline.incrby("allCommentsCount", queue.allCommentsCount);
+            redisPipeline.incrby("allInboxCount", queue.allInboxCount);
+            redisPipeline.incrby("totalGifSubmissions", queue.totalGifSubmissions);
+            redisPipeline.incrby("totalGifComments", queue.totalGifComments);
+            redisPipeline.incrby("totalGifInbox", queue.totalGifInbox);
+            this.applyItemLocationCounts(redisPipeline, "gifDomainStats", queue.domainCounts);
+            this.applyItemLocationCounts(redisPipeline, "gifSubredditStats", queue.subredditGifSubmissionCounts);
+            this.applyItemLocationCounts(redisPipeline, "gifCommentSubredditStats", queue.subredditGifCommentCounts);
+            await redisPipeline.exec();
             for (const item of queue.trackingItems) {
                 const entries = Object.entries(item).filter(e => e[1] !== undefined && e[1] !== null);
                 const keys = entries.map(e => e[0]);
@@ -139,17 +138,18 @@ export default class Tracker {
         } catch (e) {
             Logger.error(Tracker.TAG, "Unexpected error while processing tracking queue", e);
         }
+        this.queueLoop();
     }
 
-    private applyItemLocationCounts(db: IORedis.Pipeline, key: string, counts: ItemLocationCounts) {
+    private applyItemLocationCounts(redis: IORedis.Pipeline, key: string, counts: ItemLocationCounts) {
         for (const [k, v] of Object.entries(counts)) {
-            db.hincrby(key, k, v);
+            redis.hincrby(key, k, v);
         }
     }
 
-    private queueInterval() {
-        if (!this.loopInterval) {
-            this.loopInterval = setInterval(this.loop, 60000); // TODO Might do that more often?
+    private queueLoop() {
+        if (!this.loopTimeout) {
+            this.loopTimeout = setTimeout(this.loop, 1000);
         }
     }
 

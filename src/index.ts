@@ -24,10 +24,12 @@ async function runBot() {
     const bot = new AntiGifBot(db);
     await bot.init();
 
-    const sourceOrder = await db.getIngestSourceOrder();
-    ingest.setIngestSourceOrder(sourceOrder); // TODO refresh every now and then
-
-    await bot.start();
+    await updateIngestSourceOrder(db, ingest);
+    setInterval(() => {
+        updateIngestSourceOrder(db, ingest).catch(e => {
+            Logger.error(TAG, "Failed to update ingest source order", e);
+        });
+    }, 10000).unref();
 
     ingest.setSubmissionCallback((submission: Submission) => {
         bot.addSubmission(submission);
@@ -41,9 +43,15 @@ async function runBot() {
         bot.addInbox(message);
     });*/
 
-    Logger.debug(TAG, "Starting ingest...");
+    Logger.debug(TAG, "Starting bot and ingest...");
+    await bot.start();
     await ingest.startIngest();
 
+}
+
+async function updateIngestSourceOrder(db: Database, ingest: Ingest) {
+    const sourceOrder = await db.getIngestSourceOrder();
+    ingest.setIngestSourceOrder(sourceOrder);
 }
 
 runBot().catch(err => {

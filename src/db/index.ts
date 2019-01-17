@@ -1,6 +1,5 @@
 import IORedis = require("ioredis");
 import { Client } from "pg";
-import Logger from "../logger";
 
 export interface GifCacheItem {
     mp4Link: string;
@@ -53,12 +52,6 @@ interface ReplyTemplate {
     };
 }
 
-// TODO figure out how to load/manage/reload the config
-/* Config entries:
-- Snoowrap update intervals?
-- redditMp4DeferCount/generalMp4DeferCount -> I don't have fixed loop intervals anymore, also have to include defer delay (per defer), call it "count"
-- mp4CanBeBiggerDomains/nonDotGifDomains/knownDomains
-*/
 export default class Database {
 
     private static readonly TAG = "Database";
@@ -107,16 +100,24 @@ export default class Database {
         return JSON.parse(await this.redis.get("mp4BiggerAllowedDomains") || "[]");
     }
 
-    public async getCachedLink(gifUrl: string): Promise<GifCacheItem | null> {
+    public async getPossiblyNoisyDomains(): Promise<string[]> {
+        return JSON.parse(await this.redis.get("possiblyNoisyDomains") || "[]");
+    }
+
+    public async getTemporaryGifDomains(): Promise<string[]> {
+        return JSON.parse(await this.redis.get("temporaryGifDomains") || "[]");
+    }
+
+    public async getCachedLink(gifUrl: string): Promise<GifCacheItem | "err" | null> {
         let res;
         if ((res = await this.redis.get(`cache-${gifUrl}`)) !== null) {
-            return JSON.parse(res);
+            return res === "err" ? "err" : JSON.parse(res);
         }
         return null;
     }
 
-    public async cacheLink(gifUrl: string, item: GifCacheItem): Promise<void> {
-        await this.redis.set(`cache-${gifUrl}`, JSON.stringify(item), "EX", 60 * 60 * 24 * 7); // 7 days
+    public async cacheLink(gifUrl: string, item: GifCacheItem | "err"): Promise<void> {
+        await this.redis.set(`cache-${gifUrl}`, item === "err" ? "err" : JSON.stringify(item), "EX", 60 * 60 * 24 * 30); // 30 days
     }
 
     // TODO duration is never checked anywhere to expire
@@ -197,6 +198,9 @@ export default class Database {
             await this.redis.set("setup", true);
             await this.redis.set("ingestSourceOrder", '["snoowrap"]');
             await this.redis.set("gifSizeThreshold", 2_000_000);
+            await this.redis.set("mp4BiggerAllowedDomains", "[]");
+            await this.redis.set("possiblyNoisyDomains", "[]");
+            await this.redis.set("temporaryGifDomains", "[]");
             await this.redis.set("replyTemplates", JSON.stringify({
                 gifPost: {
                     base: "",

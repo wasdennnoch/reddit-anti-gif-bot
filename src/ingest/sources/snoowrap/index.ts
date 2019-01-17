@@ -17,6 +17,7 @@ export interface SnoowrapIngestOptions {
 // https://www.reddit.com/dev/api/
 
 // TODO:
+// - Customizable intervals
 // - Exponential backoff
 // - Crash at https://github.com/not-an-aardvark/snoowrap/blob/443583c97b8754c559112ee5fe4abfa8c46ad8cc/src/request_handler.js#L78
 
@@ -35,6 +36,9 @@ export default class SnoowrapIngest extends IngestSource {
     private lastCommentId?: string;
     private stopIngest: boolean = false;
 
+    // When you pass reddit an item ID as the `after` parameter that's too far behind (1000 items I assume)
+    // reddit will always return 0 items. Detect if that happens and reset last ID if required.
+    private zeroResultSubmissionFetches: number = 0;
     private zeroResultCommentFetches: number = 0;
 
     protected constructor({
@@ -103,12 +107,19 @@ export default class SnoowrapIngest extends IngestSource {
                     return;
                 }
                 if (submissions.length) {
+                    this.zeroResultSubmissionFetches = 0;
                     this.lastSubmissionId = submissions[0].name;
                     for (const s of submissions.reverse()) {
                         this.submissionCallback(s);
                     }
                 } else {
                     Logger.info(SnoowrapIngest.TAG, "Got zero submissions from reddit");
+                    this.zeroResultSubmissionFetches++;
+                    if (this.zeroResultSubmissionFetches > 4 && this.lastSubmissionId) {
+                        Logger.info(SnoowrapIngest.TAG, "Got too many zero result submission fetches, resetting last submission ID");
+                        this.zeroResultSubmissionFetches = 0;
+                        this.lastSubmissionId = undefined;
+                    }
                 }
             } catch (e) {
                 Logger.error(SnoowrapIngest.TAG, "Unexpected error when loading new submissions", e);
@@ -125,7 +136,6 @@ export default class SnoowrapIngest extends IngestSource {
                 const comments = await this.snoo.getNewComments("all", {
                     limit: 100,
                     before: this.lastCommentId || undefined,
-                    // NOTE: The above makes reddit return 0 comments when the ID is too far behind (1000 items I assume)
                 });
                 if (this.stopIngest) {
                     return;
@@ -180,7 +190,7 @@ export default class SnoowrapIngest extends IngestSource {
 
     private static createSnoowrapInstance(): Snoowrap {
         const s = new Snoowrap({
-            userAgent: `bot:anti-gif-bot:${botVersion} (by /u/MrWasdennnoch)`,
+            userAgent: `bot:${process.env.REDDIT_USERNAME}:${botVersion} (by /u/MrWasdennnoch)`,
             clientId: process.env.REDDIT_CLIENT_ID,
             clientSecret: process.env.REDDIT_CLIENT_SECRET,
             username: process.env.REDDIT_USERNAME,
