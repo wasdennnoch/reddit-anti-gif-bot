@@ -43,7 +43,7 @@ interface ReplyTemplates {
     gifComment: ReplyTemplate;
 }
 
-interface ReplyTemplate {
+export interface ReplyTemplate {
     base: string;
     parts: {
         [subreddit: string]: {

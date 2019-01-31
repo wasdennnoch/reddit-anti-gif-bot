@@ -1,11 +1,17 @@
-import fetch from "chainfetch";
 import Gfycat = require("gfycat-sdk");
+import fetch from "node-fetch";
 import { Submission } from "snoowrap";
 import Database, { GifCacheItem } from "../db";
 import { ItemTracker, TrackingErrorDetails, TrackingItemErrorCodes, TrackingStatus } from "../db/tracker";
 import Logger from "../logger";
 import { delay, version } from "../utils";
 import URL2 from "./url2";
+
+const generalDeferDelayTime = 15000;
+const iReddItDeferRetryCount = 20;
+const iReddItDeferDelayTime = 15000;
+const gfycatUploadStatusCheckRetryCount = 450;
+const gfycatUploadStatusCheckDelay = 2000;
 
 interface UrlCheckResult {
     statusCode: number;
@@ -241,16 +247,17 @@ export default class GifConverter {
         if (url.hostname === "i.redd.it" && submission) {
             // Reddit also provides their own mp4 preview but it's part of the sumbission object
             // (can't guess "random" URLs) and may not always be there in time (or ever)
-            for (let retryCount = 0; retryCount < 20; retryCount++) { // MAGIC
+            for (let retryCount = 0; retryCount < iReddItDeferRetryCount; retryCount++) {
                 try {
                     const mp4Link = submission.preview.images[0].variants.mp4.source.url; // Thanks Reddit
                     return new URL2(mp4Link);
                 } catch {
-                    Logger.debug(GifConverter.TAG, `[${submission.id}] No reddit mp4 preview found, ${retryCount + 1 < 20 ? "retrying" : "aborting"}`); // MAGIC
+                    // tslint:disable-next-line:max-line-length
+                    Logger.debug(GifConverter.TAG, `[${submission.id}] No reddit mp4 preview found, ${retryCount + 1 < iReddItDeferRetryCount ? "retrying" : "aborting"}`);
                     // ignore and try again
                 }
-                if (retryCount + 1 < 20) { // MAGIC
-                    await delay(15000); // MAGIC
+                if (retryCount + 1 < iReddItDeferRetryCount) {
+                    await delay(iReddItDeferDelayTime);
                     submission = await (submission.refresh() as Promise<any>) as Submission; // TS shenanigans
                 }
             }
@@ -293,7 +300,7 @@ export default class GifConverter {
                     });
                     return null;
                 } else {
-                    Logger.debug(GifConverter.TAG, `[${this.itemId}] Got 404 url status, ${retryCount + 1 < maxRetryCount ? "retrying" : "aborting"}`); // MAGIC
+                    Logger.debug(GifConverter.TAG, `[${this.itemId}] Got 404 url status, ${retryCount + 1 < maxRetryCount ? "retrying" : "aborting"}`);
                 }
             }
             if (!linkData.expectedType) {
@@ -308,7 +315,7 @@ export default class GifConverter {
             if (linkData) {
                 return linkData;
             } else if (retryCount + 1 < maxRetryCount) {
-                await delay(15000); // MAGIC
+                await delay(generalDeferDelayTime);
             }
         }
         this.tracker.endTracking(TrackingStatus.ERROR, {
@@ -321,20 +328,14 @@ export default class GifConverter {
 
     private async checkUrlHead(url: URL2, expectType?: string): Promise<UrlCheckResult> {
         try {
-            const res = await fetch.head(url.href)
-                .set("User-Agent", `reddit-bot /u/anti-gif-bot v${version}`)
-                .setFollowCount(4)
-                .setTimeout(10000)
-                .toBuffer()
-                .catch(e => {
-                    // Chainfetch throws an error if the status code is not okay which is not what I want
-                    // (and it's not what node-fetch does). So, check if it's a bad status code and if so don't throw.
-                    // TODO Remove when chainfetch is updated
-                    if (e.status && !e.ok) {
-                        return e;
-                    }
-                    throw e;
-                });
+            const res = await fetch(url.href, {
+                method: "HEAD",
+                follow: 4,
+                timeout: 10000,
+                headers: {
+                    "User-Agent": `reddit-bot /u/anti-gif-bot v${version}`,
+                },
+            });
             const contentType = res.headers.get("content-type") || res.headers.get("X-Archive-Orig-content-type");
             const contentLength = res.headers.get("content-length") || res.headers.get("X-Archive-Orig-content-length");
             return {
@@ -367,7 +368,7 @@ export default class GifConverter {
             title: `Automatically uploaded gif from ${this.itemLink} (by /u/anti-gif-bot)`,
             nsfw: this.nsfw ? "1" : "0",
         });
-        for (let retryCount = 0; retryCount < 300; retryCount++) { // MAGIC
+        for (let retryCount = 0; retryCount < gfycatUploadStatusCheckRetryCount; retryCount++) {
             const result = await gfycat.checkUploadStatus(uploadResult.gfyname);
             if (result.task === "complete") {
                 const uploadTime = Date.now() - startTime;
@@ -379,12 +380,12 @@ export default class GifConverter {
                 this.mp4Url = new URL2(gfyLink);
                 return;
             } else if (result.task === "encoding") {
-                await delay(2000); // MAGIC
+                await delay(gfycatUploadStatusCheckDelay);
             } else {
                 throw new Error(`Unexpected gfycat status result for upload '${uploadResult}': ${result}`);
             }
         }
-        throw new Error(`Failed to fetch converted video from gfycat within 300 attepts with 2000ms delay`); // MAGIC
+        throw new Error(`Failed to fetch converted video from gfycat within the time limits`);
     }
 
 }

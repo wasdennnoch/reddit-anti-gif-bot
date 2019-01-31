@@ -1,6 +1,6 @@
 import { ReplyableContent } from "snoowrap";
-import Database, { ExceptionSources, ExceptionTypes, GifCacheItem } from "../db";
-import { ItemTracker, TrackingItemErrorCodes, TrackingStatus } from "../db/tracker";
+import Database, { ExceptionSources, ExceptionTypes, GifCacheItem, ReplyTemplate } from "../db";
+import { ItemTracker, ItemTypes, TrackingItemErrorCodes, TrackingStatus } from "../db/tracker";
 import Logger from "../logger";
 import { delay, getReadableFileSize, toFixedFixed, version } from "../utils";
 import URL2 from "./url2";
@@ -11,13 +11,13 @@ export default class BotUtils {
 
     constructor(readonly db: Database) { }
 
-    public async assembleReply(url: URL2, itemData: GifCacheItem, subreddit: string | "dm"): Promise<string> {
+    public async assembleReply(url: URL2, itemData: GifCacheItem, itemType: ItemTypes, subreddit: string | "dm"): Promise<string> {
         const mp4BiggerThanGif = itemData.mp4Size > itemData.gifSize;
         const webmBiggerThanMp4 = itemData.webmSize !== undefined && itemData.webmSize > itemData.mp4Size;
         const savings = this.calculateSavings(itemData.gifSize, itemData.mp4Size, itemData.webmSize);
         const possiblyNoisy = (await this.db.getPossiblyNoisyDomains()).includes(url.domain);
         const temporaryGif = (await this.db.getTemporaryGifDomains()).includes(url.domain);
-        const replyTemplates = (await this.db.getReplyTemplates()).gifPost; // MAGIC (gifPost)
+        const replyTemplates = await this.getReplyTemplatesForItemType(itemType);
         const replyPartsDefault = replyTemplates.parts.default;
         const replyPartsSpecific = replyTemplates.parts[subreddit];
         const replyParts = Object.assign({}, replyPartsDefault, replyPartsSpecific);
@@ -55,8 +55,8 @@ export default class BotUtils {
     }
 
     // tslint:disable-next-line:max-line-length
-    public async createReplyAndReply(mp4Url: URL2, itemData: GifCacheItem, replyTo: ReplyableContent<any>, tracker: ItemTracker, itemId: string, subreddit: string): Promise<void> {
-        const replyText = await this.assembleReply(mp4Url, itemData, subreddit);
+    public async createReplyAndReply(mp4Url: URL2, itemData: GifCacheItem, itemType: ItemTypes, replyTo: ReplyableContent<any>, tracker: ItemTracker, itemId: string, subreddit: string): Promise<void> {
+        const replyText = await this.assembleReply(mp4Url, itemData, itemType, subreddit);
         await this.doReply(replyTo, replyText, tracker, itemId, subreddit);
     }
 
@@ -111,13 +111,25 @@ export default class BotUtils {
         };
     }
 
+    private async getReplyTemplatesForItemType(itemType: ItemTypes): Promise<ReplyTemplate> {
+        const replyTemplates = await this.db.getReplyTemplates();
+        if (itemType === ItemTypes.SUBMISSION) {
+            return replyTemplates.gifPost;
+        } else if (itemType === ItemTypes.COMMENT) {
+            return replyTemplates.gifComment;
+        } else {
+            throw new Error(`Can't get reply template for item type '${itemType}'`);
+        }
+    }
+
     private parseWaitTimeFromRateLimit(message: string): number {
         const timeString = message.slice(52, -11);
         const [numString, unitString] = timeString.split(" ");
-        const timeScale = /seconds?/.test(unitString) ? 1000 : /minutes?/.test(unitString) ? 1000 * 60 : null;
+        const timeScale = /seconds?/i.test(unitString) ? 1000 : /minutes?/i.test(unitString) ? 1000 * 60 : null;
         if (!timeScale) {
             throw new Error(`Unknown reply rate limit time '${timeString}' returned by reddit`);
         }
+        // Add +1 as a time buffer since the returned rate limit time is rounded to a human-readable format
         return (+numString + 1) * timeScale;
     }
 

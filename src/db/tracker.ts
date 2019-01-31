@@ -80,7 +80,6 @@ interface ItemLocationCounts {
 
 let updateQueue: UpdateCache;
 
-// TODO Track defers
 export default class Tracker {
 
     private static readonly TAG = "Tracker";
@@ -187,7 +186,7 @@ export default class Tracker {
                 updateQueue.totalGifInbox++;
                 break;
             default:
-                Logger.warn(Tracker.TAG, `trackNewItem: Unknown item type '${type}'`);
+                Logger.warn(Tracker.TAG, `trackNewGifItem: Unknown item type '${type}'`);
                 break;
         }
         return new ItemTracker(type, gifUrl, redditId, subreddit, timeCreated, timeStart);

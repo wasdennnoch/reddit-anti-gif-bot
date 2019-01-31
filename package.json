@@ -20,25 +20,24 @@
     "npm": "6.4.x"
   },
   "dependencies": {
-    "chainfetch": "^1.2.2",
     "dotenv": "^6.2.0",
     "fs-extra": "^7.0.1",
     "gfycat-sdk": "^1.4.18",
-    "ioredis": "^4.3.0",
+    "ioredis": "^4.5.1",
     "node-fetch": "^2.3.0",
     "pg": "^7.8.0",
     "snoowrap": "^1.15.2",
-    "tldts": "^4.0.0",
+    "tldts": "^4.0.1",
     "winston": "^2.4.4"
   },
   "devDependencies": {
     "@types/fs-extra": "^5.0.4",
-    "@types/ioredis": "^4.0.4",
-    "@types/node": "^10.12.18",
-    "@types/node-fetch": "^2.1.4",
+    "@types/ioredis": "^4.0.6",
+    "@types/node": "^10.12.20",
+    "@types/node-fetch": "^2.1.5",
     "@types/pg": "^7.4.11",
     "@types/snoowrap": "^1.16.1",
     "tslint": "^5.12.1",
-    "typescript": "^3.2.4"
+    "typescript": "^3.3.1"
   }
 }

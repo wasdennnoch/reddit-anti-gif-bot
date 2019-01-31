@@ -144,11 +144,11 @@ export default class AntiGifBot {
 
         const mp4BiggerThanGif = itemData.mp4Size > itemData.gifSize;
         if (mp4BiggerThanGif && !(await this.db.getMp4BiggerAllowedDomains()).includes(url.domain)) {
-            Logger.warn(AntiGifBot.TAG, `[${itemId}] MP4 is bigger than GIF (MP4: ${itemData.mp4Size}, GIF: ${itemData.gifSize})`);
+            Logger.info(AntiGifBot.TAG, `[${itemId}] MP4 is bigger than GIF (MP4: ${itemData.mp4Size}, GIF: ${itemData.gifSize})`);
             return tracker.endTracking(TrackingStatus.IGNORED, { errorCode: TrackingItemErrorCodes.MP4_BIGGER_THAN_GIF });
         }
 
-        await this.botUtils.createReplyAndReply(url, itemData, submission, tracker, itemId, subreddit);
+        await this.botUtils.createReplyAndReply(url, itemData, ItemTypes.SUBMISSION, submission, tracker, itemId, subreddit);
     }
 
 }
