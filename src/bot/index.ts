@@ -8,7 +8,6 @@ import URL2 from "./url2";
 
 // const urlRegex = /https?:\/\/[a-z.]+\/[^)\]\s]+(?=[\s)\].])?/gi; // To extract links in comments
 
-// TODO support https://thumbs.gfycat.com/CraftyMilkyHadrosaurus.webp
 export default class AntiGifBot {
 
     private static readonly TAG = "AntiGifBot";

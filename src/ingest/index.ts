@@ -1,4 +1,4 @@
-import { Dirent, readdir } from "fs-extra";
+import { Dirent, promises as fs } from "fs";
 import IngestSource, {
     AllCapabilitiesBitfield,
     Capabilities,
@@ -154,7 +154,7 @@ export default class Ingest {
     private async readAvailableSources() {
         const dir = `${__dirname}/sources/`;
         // Lovely outdated type fixes incoming
-        const sources = (await (readdir(dir, { withFileTypes: true } as any) as any as Promise<Dirent[]>)).filter(f => f.isDirectory());
+        const sources = (await fs.readdir(dir, { withFileTypes: true } as any) as any as Dirent[]).filter(f => f.isDirectory());
         for (const src of sources) {
             this.availableSources[src.name] = require(`${dir}${src.name}/index.js`).default;
         }

@@ -64,7 +64,7 @@ export default class BotUtils {
         try {
             Logger.debug(BotUtils.TAG, `[${itemId}] Reply in ${subreddit}: ${replyText.substring(0, 150).replace(/\r?\n/g, "-\\n-")}...`);
             if (process.env.NODE_ENV === "production") {
-                await (replyTo.reply(replyText) as Promise<any>); // TS shenanigans
+                await replyTo.reply(replyText);
             } else if (Math.random() < 0.1) {
                 // For debugging purposes pretend that replies sometimes fail due to rate limits
                 this.debugThrowRateLimitError();
