@@ -1,7 +1,7 @@
 import Gfycat = require("gfycat-sdk");
-import fetch from "node-fetch";
+import fetch, { Response } from "node-fetch";
 import { Submission } from "snoowrap";
-import Database, { GifCacheItem } from "../db";
+import Database from "../db";
 import { ItemTracker, TrackingErrorDetails, TrackingItemErrorCodes, TrackingStatus } from "../db/tracker";
 import Logger from "../logger";
 import { delay, version } from "../utils";
@@ -12,6 +12,14 @@ const iReddItDeferRetryCount = 20;
 const iReddItDeferDelayTime = 15000;
 const gfycatUploadStatusCheckRetryCount = 450;
 const gfycatUploadStatusCheckDelay = 2000;
+
+export interface GifItemData {
+    mp4Link: string;
+    mp4DisplayLink?: string;
+    gifSize: number;
+    mp4Size: number;
+    webmSize?: number;
+}
 
 interface UrlCheckResult {
     statusCode: number;
@@ -36,11 +44,13 @@ export default class GifConverter {
     private static readonly TAG = "GifConverter";
 
     private initialized: boolean = false;
+    private initError: boolean = false;
     private directGifUrl: URL2;
     private mp4Url?: URL2;
+    private mp4DisplayUrl?: URL2;
     private gifUrlCheck?: UrlCheckResult | null;
     private mp4UrlCheck?: UrlCheckResult | null;
-    private itemData?: GifCacheItem | null;
+    private itemData?: GifItemData | null;
     private ignoreItemBasedOnCache: boolean = false;
 
     constructor(readonly db: Database, readonly gifUrl: URL2, readonly itemId: string, readonly itemLink: string, readonly nsfw: boolean,
@@ -48,15 +58,24 @@ export default class GifConverter {
         this.directGifUrl = gifUrl;
     }
 
-    public async init(): Promise<void> {
+    public async init(): Promise<boolean> {
         if (!this.initialized) {
-            this.directGifUrl = await this.getDirectGifUrl();
+            const directUrl = await this.getDirectGifUrl();
+            if (directUrl) {
+                this.directGifUrl = directUrl;
+            } else {
+                this.initError = true;
+            }
             this.initialized = true;
         }
+        return !this.initError;
     }
 
-    public async getItemData(uploadIfNecessary: boolean = true): Promise<GifCacheItem | null> {
-        await this.init();
+    public async getItemData(uploadIfNecessary: boolean = true): Promise<GifItemData | null> {
+        if (await this.init()) {
+            await this.saveErrorToCache();
+            return null;
+        }
         await this.fetchCachedLink();
         if (this.itemData) {
             await this.trackCachedLink();
@@ -86,6 +105,10 @@ export default class GifConverter {
             return null;
         }
         this.tracker.updateData({ mp4Link: this.mp4Url!.href });
+        await this.tryTransformToDisplayMp4Url(this.mp4Url!);
+        if (this.mp4DisplayUrl) {
+            this.tracker.updateData({ mp4DisplayLink: this.mp4DisplayUrl.href });
+        }
         if (this.mp4Url!.hostname === "gfycat.com") {
             await this.fetchMp4InfoFromGfycat();
         } else {
@@ -104,8 +127,7 @@ export default class GifConverter {
     }
 
     private async fetchCachedLink(): Promise<void> {
-        const gifUrl = this.directGifUrl;
-        const itemData = await this.db.getCachedLink(gifUrl.href);
+        const itemData = await this.db.getCachedLink(this.directGifUrl.href);
         if (itemData === "err") {
             this.ignoreItemBasedOnCache = true;
         } else {
@@ -123,6 +145,7 @@ export default class GifConverter {
         }
         this.itemData = {
             mp4Link: this.mp4Url!.href,
+            mp4DisplayLink: this.mp4DisplayUrl ? this.mp4DisplayUrl.href : undefined,
             // TODO I _assume_ that if it's not uploaded it's from a known host which provides a length header.
             // What if no header is there unexpectedly?
             gifSize: this.gifUrlCheck.contentLength || -1,
@@ -139,6 +162,7 @@ export default class GifConverter {
         this.tracker.updateData({
             fromCache: true,
             mp4Link: itemData.mp4Link,
+            mp4DisplayLink: itemData.mp4DisplayLink,
             gifSize: itemData.gifSize,
             mp4Size: itemData.mp4Size,
             webmSize: itemData.webmSize,
@@ -172,6 +196,7 @@ export default class GifConverter {
         Logger.debug(GifConverter.TAG, `[${this.itemId}] Gfycat info returned gifSize ${item.gifSize}, previous HEAD was ${gifContentLength}`);
         this.itemData = {
             mp4Link: this.mp4Url.href,
+            mp4DisplayLink: this.mp4DisplayUrl ? this.mp4DisplayUrl.href : undefined,
             // TODO Apparently gfyItem.gifSize is null sometimes
             gifSize: item.gifSize || gifContentLength || -1,
             mp4Size: item.mp4Size,
@@ -200,13 +225,10 @@ export default class GifConverter {
 
     // Some URLs embed gifs but aren't actually the direct link to the gif.
     // This method transforms such known URLs if required.
-    private async getDirectGifUrl(): Promise<URL2> {
+    private async getDirectGifUrl(): Promise<URL2 | null> {
         const url = this.gifUrl;
         let result = url.href;
         if (url.domain === "giphy.com") {
-            // TODO Short URLs like http://gph.is/XJ200y (first redirects to https)
-            // TODO https://i.giphy.com/3o7526I8OBxWwtYure.mp4 sometimes Better quality at https://i.giphy.com/media/3o7526I8OBxWwtYure/giphy-hd.mp4
-            // TODO With the API giphy already offers different versions and file size stats, however they want an "Powered by Giphy" somewhere
             // Note: https://i.giphy.com/JIX9t2j0ZTN9S.mp4 === https://i.giphy.com/media/JIX9t2j0ZTN9S/giphy.mp4 (extension-independent)
             if (/^(eph)?media[0-9]?/.test(url.subdomain) || url.href.includes("i.giphy.com/media/")) {
                 // https://media2.giphy.com/media/JIX9t2j0ZTN9S/200w.webp => https://i.giphy.com/JIX9t2j0ZTN9S.gif
@@ -231,6 +253,19 @@ export default class GifConverter {
                 }
                 result = link + ".gif";
             }
+        } else if (url.domain === "gph.is") {
+            // Giphy URL shortener
+            const loc = await this.getRedirectLocation(url);
+            if (loc === null || loc === "http://giphy.com/") {
+                // Error or unknown short link (always redirects to main website)
+                this.tracker.endTracking(TrackingStatus.ERROR, {
+                    errorCode: TrackingItemErrorCodes.HEAD_FAILED_GIF,
+                    errorDetail: TrackingErrorDetails.REDIRECT_FAIL,
+                    errorExtra: `${loc}`,
+                });
+                return null;
+            }
+            result = loc;
         }
         return new URL2(result);
     }
@@ -264,6 +299,12 @@ export default class GifConverter {
             return null;
         }
         return null;
+    }
+
+    private async tryTransformToDisplayMp4Url(url: URL2): Promise<void> {
+        if (url.domain === "giphy.com") {
+            this.mp4DisplayUrl = new URL2(url.href.replace(/i.giphy.com\/(media\/)?/, "media.giphy.com/media/").replace(/(\/giphy)?\.mp4$/, "/giphy.mp4"));
+        }
     }
 
     private async fetchGifUrlInfo(): Promise<void> {
@@ -328,14 +369,7 @@ export default class GifConverter {
 
     private async checkUrlHead(url: URL2, expectType?: string): Promise<UrlCheckResult> {
         try {
-            const res = await fetch(url.href, {
-                method: "HEAD",
-                follow: 4,
-                timeout: 10000,
-                headers: {
-                    "User-Agent": `reddit-bot /u/anti-gif-bot v${version}`,
-                },
-            });
+            const res = await this.makeRequest(url.href, "HEAD");
             const contentType = res.headers.get("content-type") || res.headers.get("X-Archive-Orig-content-type");
             const contentLength = res.headers.get("content-length") || res.headers.get("X-Archive-Orig-content-length");
             return {
@@ -358,6 +392,31 @@ export default class GifConverter {
                 error: err,
             };
         }
+    }
+
+    private async getRedirectLocation(url: URL2): Promise<string | null> {
+        try {
+            const res = await this.makeRequest(url.href, "GET", false);
+            if (res.status > 300 && res.status < 400) {
+                return res.headers.get("Location");
+            } else {
+                return null;
+            }
+        } catch (e) {
+            return null;
+        }
+    }
+
+    private async makeRequest(href: string, method: string, followRedirects: boolean = true): Promise<Response> {
+        return fetch(href, {
+            method,
+            follow: followRedirects ? 4 : 0,
+            timeout: 10000,
+            headers: {
+                "User-Agent": `reddit-bot /u/anti-gif-bot v${version}`,
+                "Accept": "*/*",
+            },
+        });
     }
 
     private async uploadGif(): Promise<void> {

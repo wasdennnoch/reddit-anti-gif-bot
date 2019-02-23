@@ -36,6 +36,7 @@ export enum TrackingErrorDetails {
     CONTENT_TYPE = "content-type",
     CONTENT_LENGTH = "content-length",
     MAX_RETRY_COUNT_REACHED = "max-retry-count-reached",
+    REDIRECT_FAIL = "redirect-fail",
 }
 
 interface TrackingItemEntry {
@@ -51,6 +52,7 @@ interface TrackingItemEntry {
     hostname: string;
     gifLink: string;
     mp4Link?: string;
+    mp4DisplayLink?: string;
     gifSize?: number;
     mp4Size?: number;
     webmSize?: number;

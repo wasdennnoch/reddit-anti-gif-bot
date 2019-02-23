@@ -125,7 +125,7 @@ export default class AntiGifBot {
         ] = await Promise.all([
             this.db.isException(ExceptionTypes.SUBREDDIT, subreddit),
             this.db.isException(ExceptionTypes.DOMAIN, url.domain),
-            this.db.isException(ExceptionTypes.USER, submission.author.name), // TODO for posts as well?
+            this.db.isException(ExceptionTypes.USER, submission.author.name),
         ]);
         if (isSubredditException || isDomainException || isUserException) {
             if (!isDomainException) {

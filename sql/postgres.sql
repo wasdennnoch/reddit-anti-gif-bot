@@ -19,6 +19,7 @@ CREATE TABLE IF NOT EXISTS gifStats (
     hostname         TEXT      NOT NULL,
     gifLink          TEXT      NOT NULL,
     mp4Link          TEXT,
+    mp4DisplayLink   TEXT,
     gifSize          BIGINT,
     mp4Size          BIGINT,
     webmSize         BIGINT,

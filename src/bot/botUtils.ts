@@ -1,8 +1,9 @@
 import { ReplyableContent } from "snoowrap";
-import Database, { ExceptionSources, ExceptionTypes, GifCacheItem, ReplyTemplate } from "../db";
+import Database, { ExceptionSources, ExceptionTypes, ReplyTemplate } from "../db";
 import { ItemTracker, ItemTypes, TrackingItemErrorCodes, TrackingStatus } from "../db/tracker";
 import Logger from "../logger";
 import { delay, getReadableFileSize, toFixedFixed, version } from "../utils";
+import { GifItemData } from "./gifConverter";
 import URL2 from "./url2";
 
 export default class BotUtils {
@@ -11,7 +12,7 @@ export default class BotUtils {
 
     constructor(readonly db: Database) { }
 
-    public async assembleReply(url: URL2, itemData: GifCacheItem, itemType: ItemTypes, subreddit: string | "dm"): Promise<string> {
+    public async assembleReply(url: URL2, itemData: GifItemData, itemType: ItemTypes, subreddit: string | "dm"): Promise<string> {
         const mp4BiggerThanGif = itemData.mp4Size > itemData.gifSize;
         const webmBiggerThanMp4 = itemData.webmSize !== undefined && itemData.webmSize > itemData.mp4Size;
         const savings = this.calculateSavings(itemData.gifSize, itemData.mp4Size, itemData.webmSize);
@@ -34,7 +35,7 @@ export default class BotUtils {
             .replace("{{mp4Save}}", String(savings.mp4Save))
             .replace("{{webmSave}}", String(savings.webmSave || ""))
             .replace("{{version}}", version)
-            .replace("{{link}}", itemData.mp4Link);
+            .replace("{{link}}", itemData.mp4DisplayLink || itemData.mp4Link);
         for (const [k, v] of Object.entries(replyParts)) {
             replyText = replyText.replace(`{{${k}}}`, v || "");
         }
@@ -55,7 +56,7 @@ export default class BotUtils {
     }
 
     // tslint:disable-next-line:max-line-length
-    public async createReplyAndReply(mp4Url: URL2, itemData: GifCacheItem, itemType: ItemTypes, replyTo: ReplyableContent<any>, tracker: ItemTracker, itemId: string, subreddit: string): Promise<void> {
+    public async createReplyAndReply(mp4Url: URL2, itemData: GifItemData, itemType: ItemTypes, replyTo: ReplyableContent<any>, tracker: ItemTracker, itemId: string, subreddit: string): Promise<void> {
         const replyText = await this.assembleReply(mp4Url, itemData, itemType, subreddit);
         await this.doReply(replyTo, replyText, tracker, itemId, subreddit);
     }

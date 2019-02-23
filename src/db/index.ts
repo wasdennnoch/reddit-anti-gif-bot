@@ -1,12 +1,6 @@
 import IORedis = require("ioredis");
 import { Client } from "pg";
-
-export interface GifCacheItem {
-    mp4Link: string;
-    gifSize: number;
-    mp4Size: number;
-    webmSize?: number;
-}
+import { GifItemData } from "../bot/gifConverter";
 
 export enum ExceptionSources {
     BAN_DM = "ban-dm",
@@ -108,7 +102,7 @@ export default class Database {
         return JSON.parse(await this.redis.get("temporaryGifDomains") || "[]");
     }
 
-    public async getCachedLink(gifUrl: string): Promise<GifCacheItem | "err" | null> {
+    public async getCachedLink(gifUrl: string): Promise<GifItemData | "err" | null> {
         let res;
         if ((res = await this.redis.get(`cache-${gifUrl}`)) !== null) {
             return res === "err" ? "err" : JSON.parse(res);
@@ -116,7 +110,7 @@ export default class Database {
         return null;
     }
 
-    public async cacheLink(gifUrl: string, item: GifCacheItem | "err"): Promise<void> {
+    public async cacheLink(gifUrl: string, item: GifItemData | "err"): Promise<void> {
         await this.redis.set(`cache-${gifUrl}`, item === "err" ? "err" : JSON.stringify(item), "EX", 60 * 60 * 24 * 30); // 30 days
     }
 
