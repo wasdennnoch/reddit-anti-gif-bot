@@ -1,5 +1,5 @@
 import { ReplyableContent } from "snoowrap";
-import Database, { ExceptionSources, ExceptionTypes, ReplyTemplate } from "../db";
+import Database, { ExceptionSources, LocationTypes, ReplyTemplate } from "../db";
 import { ItemTracker, ItemTypes, TrackingItemErrorCodes, TrackingStatus } from "../db/tracker";
 import Logger from "../logger";
 import { delay, getReadableFileSize, toFixedFixed, version } from "../utils";
@@ -76,7 +76,7 @@ export default class BotUtils {
             if (err.name === "StatusCodeError" && err.statusCode === 403 && err.error.message === "Forbidden") {
                 // Unexpected Ban
                 Logger.info(BotUtils.TAG, `[${itemId}] Reply: Unexpectedly banned in ${subreddit}`);
-                await this.db.addException(ExceptionTypes.SUBREDDIT, subreddit, ExceptionSources.BAN_ERROR, null, Date.now());
+                await this.db.addException(LocationTypes.SUBREDDIT, subreddit, ExceptionSources.BAN_ERROR, null, Date.now());
                 return tracker.endTracking(TrackingStatus.ERROR, {
                     errorCode: TrackingItemErrorCodes.REPLY_BAN,
                 });

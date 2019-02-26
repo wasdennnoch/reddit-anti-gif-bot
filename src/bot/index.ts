@@ -1,5 +1,5 @@
 import { Comment, PrivateMessage, Submission } from "snoowrap";
-import Database, { ExceptionTypes } from "../db";
+import Database, { LocationTypes } from "../db";
 import Tracker, { ItemTracker, ItemTypes, TrackingItemErrorCodes, TrackingStatus } from "../db/tracker";
 import Logger from "../logger";
 import BotUtils from "./botUtils";
@@ -99,7 +99,7 @@ export default class AntiGifBot {
     private async processComment(comment: Comment): Promise<void> {
         try {
             Tracker.trackNewIncomingItem(ItemTypes.COMMENT);
-            if (await this.db.isException(ExceptionTypes.USER, comment.author.name)) {
+            if (await this.db.isException(LocationTypes.USER, comment.author.name)) {
                 return;
             }
         } catch (e) {
@@ -117,15 +117,15 @@ export default class AntiGifBot {
 
     private async _processSubmission(submission: Submission, url: URL2, subreddit: string, itemId: string, tracker: ItemTracker): Promise<void> {
         Logger.debug(AntiGifBot.TAG, `[${itemId}] -> Identified as GIF link | Subreddit: ${subreddit} | Link: ${url.href}`);
-        const gifConverter = new GifConverter(this.db, url, itemId, `https://redd.it/${itemId}`, submission.over_18, tracker, submission);
+        const gifConverter = new GifConverter(this.db, url, itemId, `https://redd.it/${itemId}`, submission.over_18, tracker, subreddit, submission);
         const [
             isSubredditException,
             isDomainException,
             isUserException,
         ] = await Promise.all([
-            this.db.isException(ExceptionTypes.SUBREDDIT, subreddit),
-            this.db.isException(ExceptionTypes.DOMAIN, url.domain),
-            this.db.isException(ExceptionTypes.USER, submission.author.name),
+            this.db.isException(LocationTypes.SUBREDDIT, subreddit),
+            this.db.isException(LocationTypes.DOMAIN, url.domain),
+            this.db.isException(LocationTypes.USER, submission.author.name),
         ]);
         if (isSubredditException || isDomainException || isUserException) {
             if (!isDomainException) {

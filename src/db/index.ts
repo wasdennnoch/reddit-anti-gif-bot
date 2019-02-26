@@ -11,14 +11,14 @@ export enum ExceptionSources {
     UNKNOWN = "unknown",
 }
 
-export enum ExceptionTypes {
+export enum LocationTypes {
     SUBREDDIT = "subreddit",
     USER = "user",
     DOMAIN = "domain",
 }
 
 interface ExceptionData {
-    type: ExceptionTypes;
+    type: LocationTypes;
     location: string;
     source: ExceptionSources;
     reason: string | null;
@@ -27,9 +27,9 @@ interface ExceptionData {
 }
 
 interface ExceptionList {
-    [ExceptionTypes.SUBREDDIT]: string[];
-    [ExceptionTypes.USER]: string[];
-    [ExceptionTypes.DOMAIN]: string[];
+    [LocationTypes.SUBREDDIT]: string[];
+    [LocationTypes.USER]: string[];
+    [LocationTypes.DOMAIN]: string[];
 }
 
 interface ReplyTemplates {
@@ -81,8 +81,12 @@ export default class Database {
         return JSON.parse(await this.redis.get("ingestSourceOrder") || "[]");
     }
 
-    public async getGifSizeThreshold(): Promise<number> {
-        return +(await this.redis.get("gifSizeThreshold") || 2_000_000);
+    public async getGifSizeThreshold(type: LocationTypes, location: string): Promise<number> {
+        return +(await this.redis.hget("customGifSizeThresholds", `${type}-${location}`) || await this.redis.get("defaultGifSizeThreshold") || 2_000_000);
+    }
+
+    public async setCustomGifSizeThreshold(type: LocationTypes, location: string, threshold: number): Promise<void> {
+        await this.redis.hset("customGifSizeThresholds", `${type}-${location}`, threshold);
     }
 
     // TODO May be a bit better to turn this into a hash with the fields gifPost|gifComment
@@ -116,7 +120,7 @@ export default class Database {
 
     // TODO duration is never checked anywhere to expire
     // tslint:disable-next-line:max-line-length
-    public async addException(type: ExceptionTypes, location: string, source: ExceptionSources, reason: string | null, timestamp: number, duration?: number): Promise<void> {
+    public async addException(type: LocationTypes, location: string, source: ExceptionSources, reason: string | null, timestamp: number, duration?: number): Promise<void> {
         await this.redis.hset("exceptions", `${type}-${location}`, JSON.stringify({
             source,
             reason: reason || null,
@@ -125,7 +129,7 @@ export default class Database {
         }));
     }
 
-    public async getAllExceptions(type?: ExceptionTypes): Promise<ExceptionData[]> {
+    public async getAllExceptions(type?: LocationTypes): Promise<ExceptionData[]> {
         let exceptions = [];
         if (type) {
             let cursor = 0;
@@ -164,13 +168,13 @@ export default class Database {
     public async getExceptions(): Promise<ExceptionList> {
         const keys = await this.redis.hkeys("exceptions") as string[];
         const res = {
-            [ExceptionTypes.SUBREDDIT]: [],
-            [ExceptionTypes.USER]: [],
-            [ExceptionTypes.DOMAIN]: [],
+            [LocationTypes.SUBREDDIT]: [],
+            [LocationTypes.USER]: [],
+            [LocationTypes.DOMAIN]: [],
         } as ExceptionList;
         for (const key of keys) {
             const [type, location] = key.split("-");
-            res[type as ExceptionTypes].push(location);
+            res[type as LocationTypes].push(location);
         }
         return res;
     }
@@ -179,11 +183,11 @@ export default class Database {
         return this.redis.hlen("exceptions");
     }
 
-    public async isException(type: ExceptionTypes, location: string): Promise<boolean> {
+    public async isException(type: LocationTypes, location: string): Promise<boolean> {
         return Boolean(await this.redis.hexists("exceptions", `${type}-${location}`));
     }
 
-    public async removeException(type: ExceptionTypes, location: string): Promise<void> {
+    public async removeException(type: LocationTypes, location: string): Promise<void> {
         await this.redis.hdel("exceptions", `${type}-${location}`);
     }
 
@@ -191,7 +195,7 @@ export default class Database {
         if (!await this.redis.get("setup")) {
             await this.redis.set("setup", true);
             await this.redis.set("ingestSourceOrder", '["snoowrap"]');
-            await this.redis.set("gifSizeThreshold", 2_000_000);
+            await this.redis.set("defaultGifSizeThreshold", 2_000_000);
             await this.redis.set("mp4BiggerAllowedDomains", "[]");
             await this.redis.set("possiblyNoisyDomains", "[]");
             await this.redis.set("temporaryGifDomains", "[]");

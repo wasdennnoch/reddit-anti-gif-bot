@@ -1,7 +1,7 @@
 import Gfycat = require("gfycat-sdk");
 import fetch, { Response } from "node-fetch";
 import { Submission } from "snoowrap";
-import Database from "../db";
+import Database, { LocationTypes } from "../db";
 import { ItemTracker, TrackingErrorDetails, TrackingItemErrorCodes, TrackingStatus } from "../db/tracker";
 import Logger from "../logger";
 import { delay, version } from "../utils";
@@ -54,7 +54,7 @@ export default class GifConverter {
     private ignoreItemBasedOnCache: boolean = false;
 
     constructor(readonly db: Database, readonly gifUrl: URL2, readonly itemId: string, readonly itemLink: string, readonly nsfw: boolean,
-        readonly tracker: ItemTracker, readonly submission?: Submission) {
+        readonly tracker: ItemTracker, readonly subreddit: string, readonly submission?: Submission) {
         this.directGifUrl = gifUrl;
     }
 
@@ -170,7 +170,7 @@ export default class GifConverter {
     }
 
     private async compareGifSizeThreshold(gifSize: number): Promise<boolean> {
-        const gifSizeThreshold = await this.db.getGifSizeThreshold();
+        const gifSizeThreshold = await this.db.getGifSizeThreshold(LocationTypes.SUBREDDIT, this.subreddit);
         if (gifSize < gifSizeThreshold) {
             Logger.debug(GifConverter.TAG, `[${this.itemId}] GIF content length too small with ${gifSize} < ${gifSizeThreshold}`);
             this.tracker.endTracking(TrackingStatus.IGNORED, { errorCode: TrackingItemErrorCodes.GIF_TOO_SMALL });
