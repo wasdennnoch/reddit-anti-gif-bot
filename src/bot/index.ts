@@ -1,7 +1,8 @@
 import { Comment, PrivateMessage, Submission } from "snoowrap";
-import Database, { LocationTypes } from "../db";
-import Tracker, { ItemTracker, ItemTypes, TrackingItemErrorCodes, TrackingStatus } from "../db/tracker";
+import Database from "../db";
+import Tracker, { ItemTracker, TrackingItemErrorCodes, TrackingStatus } from "../db/tracker";
 import Logger from "../logger";
+import { ItemTypes, LocationTypes } from "../types";
 import BotUtils from "./botUtils";
 import GifConverter from "./gifConverter";
 import URL2 from "./url2";

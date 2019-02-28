@@ -1,6 +1,8 @@
 import IORedis = require("ioredis");
 import { Client } from "pg";
 import { GifItemData } from "../bot/gifConverter";
+import Logger from "../logger";
+import { LocationTypes, ReplyTypes } from "../types";
 
 export enum ExceptionSources {
     BAN_DM = "ban-dm",
@@ -9,12 +11,6 @@ export enum ExceptionSources {
     USER_DM = "user-dm",
     MANUAL = "manual",
     UNKNOWN = "unknown",
-}
-
-export enum LocationTypes {
-    SUBREDDIT = "subreddit",
-    USER = "user",
-    DOMAIN = "domain",
 }
 
 interface ExceptionData {
@@ -30,11 +26,6 @@ interface ExceptionList {
     [LocationTypes.SUBREDDIT]: string[];
     [LocationTypes.USER]: string[];
     [LocationTypes.DOMAIN]: string[];
-}
-
-interface ReplyTemplates {
-    gifPost: ReplyTemplate;
-    gifComment: ReplyTemplate;
 }
 
 export interface ReplyTemplate {
@@ -56,7 +47,7 @@ export default class Database {
     public constructor() {
         this.redis = new IORedis({
             lazyConnect: true,
-            keyPrefix: "gif-",
+            keyPrefix: process.env.REDIS_PREFIX || "gif-",
             connectionName: "anti-gif-bot",
             showFriendlyErrorStack: process.env.NODE_ENV !== "production",
         });
@@ -64,6 +55,7 @@ export default class Database {
     }
 
     public async init() {
+        Logger.debug(Database.TAG, "Connecting to DBs...");
         await this.redis.connect();
         await this.postgres.connect();
         await this.setupDB();
@@ -90,8 +82,8 @@ export default class Database {
     }
 
     // TODO May be a bit better to turn this into a hash with the fields gifPost|gifComment
-    public async getReplyTemplates(): Promise<ReplyTemplates> {
-        return JSON.parse(await this.redis.get("replyTemplates") || "{}");
+    public async getReplyTemplates(type: ReplyTypes): Promise<ReplyTemplate> {
+        return JSON.parse(await this.redis.hget("replyTemplates", type) || "{}");
     }
 
     public async getMp4BiggerAllowedDomains(): Promise<string[]> {
@@ -199,20 +191,14 @@ export default class Database {
             await this.redis.set("mp4BiggerAllowedDomains", "[]");
             await this.redis.set("possiblyNoisyDomains", "[]");
             await this.redis.set("temporaryGifDomains", "[]");
-            await this.redis.set("replyTemplates", JSON.stringify({
-                gifPost: {
-                    base: "",
-                    parts: {
-                        default: {},
-                    },
+            const emptyReplyTemplate = JSON.stringify({
+                base: "",
+                parts: {
+                    default: {},
                 },
-                gifComment: {
-                    base: "",
-                    parts: {
-                        default: {},
-                    },
-                },
-            }));
+            });
+            await this.redis.hset("replyTemplates", ReplyTypes.GIF_POST, emptyReplyTemplate);
+            await this.redis.hset("replyTemplates", ReplyTypes.GIF_COMMENT, emptyReplyTemplate);
         }
     }
 

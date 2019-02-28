@@ -1,7 +1,8 @@
 import { ReplyableContent } from "snoowrap";
-import Database, { ExceptionSources, LocationTypes, ReplyTemplate } from "../db";
-import { ItemTracker, ItemTypes, TrackingItemErrorCodes, TrackingStatus } from "../db/tracker";
+import Database, { ExceptionSources, ReplyTemplate } from "../db";
+import { ItemTracker, TrackingItemErrorCodes, TrackingStatus } from "../db/tracker";
 import Logger from "../logger";
+import { ItemTypes, LocationTypes, ReplyTypes } from "../types";
 import { delay, getReadableFileSize, toFixedFixed, version } from "../utils";
 import { GifItemData } from "./gifConverter";
 import URL2 from "./url2";
@@ -15,7 +16,6 @@ export default class BotUtils {
     public async assembleReply(url: URL2, itemData: GifItemData, itemType: ItemTypes, subreddit: string | "dm"): Promise<string> {
         const mp4BiggerThanGif = itemData.mp4Size > itemData.gifSize;
         const webmBiggerThanMp4 = itemData.webmSize !== undefined && itemData.webmSize > itemData.mp4Size;
-        const savings = this.calculateSavings(itemData.gifSize, itemData.mp4Size, itemData.webmSize);
         const possiblyNoisy = (await this.db.getPossiblyNoisyDomains()).includes(url.domain);
         const temporaryGif = (await this.db.getTemporaryGifDomains()).includes(url.domain);
         const replyTemplates = await this.getReplyTemplatesForItemType(itemType);
@@ -32,8 +32,8 @@ export default class BotUtils {
             .replace("{{gifSize}}", getReadableFileSize(itemData.gifSize))
             .replace("{{mp4Size}}", getReadableFileSize(itemData.mp4Size))
             .replace("{{webmSize}}", getReadableFileSize(itemData.webmSize))
-            .replace("{{mp4Save}}", String(savings.mp4Save))
-            .replace("{{webmSave}}", String(savings.webmSave || ""))
+            .replace("{{mp4Save}}", this.calculateSavingPercentage(itemData.gifSize, itemData.mp4Size))
+            .replace("{{webmSave}}", itemData.webmSize ? this.calculateSavingPercentage(itemData.gifSize, itemData.webmSize) : "")
             .replace("{{version}}", version)
             .replace("{{link}}", itemData.mp4DisplayLink || itemData.mp4Link);
         for (const [k, v] of Object.entries(replyParts)) {
@@ -97,30 +97,20 @@ export default class BotUtils {
         }
     }
 
-    private calculateSavings(gifSize: number, mp4Size: number, webmSize?: number): {
-        mp4Save: number;
-        webmSave?: number;
-    } {
-        const mp4Save = toFixedFixed((gifSize - mp4Size) / gifSize * 100);
-        let webmSave;
-        if (webmSize) {
-            webmSave = toFixedFixed((gifSize - webmSize) / gifSize * 100);
-        }
-        return {
-            mp4Save,
-            webmSave,
-        };
+    private calculateSavingPercentage(firstSize: number, secondSize: number): string {
+        return toFixedFixed((firstSize - secondSize) / firstSize * 100);
     }
 
     private async getReplyTemplatesForItemType(itemType: ItemTypes): Promise<ReplyTemplate> {
-        const replyTemplates = await this.db.getReplyTemplates();
+        let replyType: ReplyTypes;
         if (itemType === ItemTypes.SUBMISSION) {
-            return replyTemplates.gifPost;
+            replyType = ReplyTypes.GIF_POST;
         } else if (itemType === ItemTypes.COMMENT) {
-            return replyTemplates.gifComment;
+            replyType = ReplyTypes.GIF_COMMENT;
         } else {
             throw new Error(`Can't get reply template for item type '${itemType}'`);
         }
+        return await this.db.getReplyTemplates(replyType);
     }
 
     private parseWaitTimeFromRateLimit(message: string): number {
@@ -130,7 +120,7 @@ export default class BotUtils {
         if (!timeScale) {
             throw new Error(`Unknown reply rate limit time '${timeString}' returned by reddit`);
         }
-        // Add +1 as a time buffer since the returned rate limit time is rounded to a human-readable format
+        // Add +1 as an additional buffer since the returned remaining rate limit is rounded to a human-readable format
         return (+numString + 1) * timeScale;
     }
 

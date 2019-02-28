@@ -2,13 +2,8 @@ import IORedis = require("ioredis");
 import Database from ".";
 import URL2 from "../bot/url2";
 import Logger from "../logger";
+import { ItemTypes } from "../types";
 import { getReadableFileSize } from "../utils";
-
-export enum ItemTypes {
-    SUBMISSION = "submission",
-    COMMENT = "comment",
-    INBOX = "inbox",
-}
 
 export enum TrackingStatus {
     SUCCESS = "success",
@@ -26,7 +21,7 @@ export enum TrackingItemErrorCodes {
     HEAD_FAILED_GIF = "head-failed-gif",         // The HEAD request(s) to the gif file failed (invalid url/host unreachabe etc)
     HEAD_FAILED_MP4 = "head-failed-mp4",         // The HEAD request(s) to the mp4 file failed (invalid url/host unreachabe etc)
     MP4_BIGGER_THAN_GIF = "mp4-bigger-than-gif", // The MP4 file was bigger than the gif while when it was not allowed to be
-    TRACKER_NOT_ENDED = "tracker-not-ended",
+    TRACKER_NOT_ENDED = "tracker-not-ended",     // The endTracking method was never called after processing finished - this should not happen!
     UNKNOWN = "unknown",
 }
 

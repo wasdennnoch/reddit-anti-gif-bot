@@ -1,9 +1,10 @@
 import Gfycat = require("gfycat-sdk");
 import fetch, { Response } from "node-fetch";
 import { Submission } from "snoowrap";
-import Database, { LocationTypes } from "../db";
+import Database from "../db";
 import { ItemTracker, TrackingErrorDetails, TrackingItemErrorCodes, TrackingStatus } from "../db/tracker";
 import Logger from "../logger";
+import { LocationTypes } from "../types";
 import { delay, version } from "../utils";
 import URL2 from "./url2";
 

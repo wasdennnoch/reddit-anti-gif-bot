@@ -21,7 +21,12 @@ export const getReadableFileSize = (bytes: number | null | undefined): string =>
 };
 
 // Because Number#toFixed() doesn't always do what you expect
-export const toFixedFixed = (num: number, decimals = 2): number => {
-    decimals = Math.pow(10, decimals);
-    return Math.round(num * decimals) / decimals;
+export const toFixedFixed = (num: number, decimals = 2): string => {
+    const multiplier = Math.pow(10, decimals);
+    const rounded = `${Math.round(num * multiplier) / multiplier}`;
+    const [integer, fraction] = rounded.split(".");
+    if (!fraction) {
+        return rounded;
+    }
+    return `${integer}.${fraction.padEnd(decimals, "0")}`;
 };
