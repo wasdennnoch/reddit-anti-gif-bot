@@ -138,6 +138,7 @@ export default class AntiGifBot {
 
         const itemData = await gifConverter.getItemData();
         if (!itemData) {
+            Logger.info(AntiGifBot.TAG, `[${itemId}] Ignoring item based on GifConverter result`);
             // Error handling has already been done
             return;
         }

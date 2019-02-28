@@ -59,6 +59,7 @@ export default class GifConverter {
         this.directGifUrl = gifUrl;
     }
 
+    // Returns true if init was successful
     public async init(): Promise<boolean> {
         if (!this.initialized) {
             const directUrl = await this.getDirectGifUrl();
@@ -73,7 +74,8 @@ export default class GifConverter {
     }
 
     public async getItemData(uploadIfNecessary: boolean = true): Promise<GifItemData | null> {
-        if (await this.init()) {
+        if (!await this.init()) {
+            Logger.debug(GifConverter.TAG, `[${this.itemId}] Initialization faied!`);
             await this.saveErrorToCache();
             return null;
         }
@@ -82,6 +84,7 @@ export default class GifConverter {
             await this.trackCachedLink();
             return this.itemData;
         } else if (this.ignoreItemBasedOnCache) {
+            Logger.debug(GifConverter.TAG, `[${this.itemId}] Ignoring item based on cached error`);
             return null;
         }
         this.tracker.updateData({ fromCache: false });
@@ -99,11 +102,18 @@ export default class GifConverter {
             }
         }
         await this.generateMp4Url();
-        if (!this.mp4Url && uploadIfNecessary) {
-            await this.uploadGif();
-        } else {
-            Logger.debug(GifConverter.TAG, `[${this.itemId}] Not uploading gif, no mp4 data will be available`);
-            return null;
+        if (!this.mp4Url) {
+            if (uploadIfNecessary) {
+                await this.uploadGif();
+            } else {
+                this.tracker.endTracking(TrackingStatus.ERROR, {
+                    errorCode: TrackingItemErrorCodes.NO_MP4_LOCATION,
+                    errorDetail: TrackingErrorDetails.MAX_RETRY_COUNT_REACHED,
+                    errorExtra: "no-upload",
+                });
+                Logger.debug(GifConverter.TAG, `[${this.itemId}] Not uploading gif, no mp4 data will be available`);
+                return null;
+            }
         }
         this.tracker.updateData({ mp4Link: this.mp4Url!.href });
         await this.tryTransformToDisplayMp4Url(this.mp4Url!);
@@ -258,6 +268,7 @@ export default class GifConverter {
             // Giphy URL shortener
             const loc = await this.getRedirectLocation(url);
             if (loc === null || loc === "http://giphy.com/") {
+                Logger.debug(GifConverter.TAG, `[${this.itemId}] Expansion of gph.is link failed (loc=${loc})`);
                 // Error or unknown short link (always redirects to main website)
                 this.tracker.endTracking(TrackingStatus.ERROR, {
                     errorCode: TrackingItemErrorCodes.HEAD_FAILED_GIF,
@@ -289,7 +300,7 @@ export default class GifConverter {
                     return new URL2(mp4Link);
                 } catch {
                     // tslint:disable-next-line:max-line-length
-                    Logger.debug(GifConverter.TAG, `[${submission.id}] No reddit mp4 preview found, ${retryCount + 1 < iReddItDeferRetryCount ? "retrying" : "aborting"}`);
+                    Logger.debug(GifConverter.TAG, `[${submission.id}] No reddit mp4 preview found, ${retryCount + 1 < iReddItDeferRetryCount ? "retrying after delay" : "aborting"}`);
                     // ignore and try again
                 }
                 if (retryCount + 1 < iReddItDeferRetryCount) {
@@ -360,6 +371,7 @@ export default class GifConverter {
                 await delay(generalDeferDelayTime);
             }
         }
+        Logger.info(GifConverter.TAG, `[${this.itemId}] Reached max retry count while trying to fetch ${url.href}`);
         this.tracker.endTracking(TrackingStatus.ERROR, {
             errorCode,
             errorDetail: TrackingErrorDetails.MAX_RETRY_COUNT_REACHED,
