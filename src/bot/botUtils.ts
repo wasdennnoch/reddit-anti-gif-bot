@@ -76,7 +76,12 @@ export default class BotUtils {
             if (err.name === "StatusCodeError" && err.statusCode === 403 && err.error.message === "Forbidden") {
                 // Unexpected Ban
                 Logger.info(BotUtils.TAG, `[${itemId}] Reply: Unexpectedly banned in ${subreddit}`);
-                await this.db.addException(LocationTypes.SUBREDDIT, subreddit, ExceptionSources.BAN_ERROR, null, Date.now());
+                await this.db.addException({
+                    type: LocationTypes.SUBREDDIT,
+                    location: subreddit,
+                    source: ExceptionSources.BAN_ERROR,
+                    creationTimestamp: Date.now(),
+                });
                 return tracker.endTracking(TrackingStatus.ERROR, {
                     errorCode: TrackingItemErrorCodes.REPLY_BAN,
                 });

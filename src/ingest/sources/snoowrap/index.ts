@@ -16,10 +16,9 @@ export interface SnoowrapIngestOptions {
 // https://not-an-aardvark.github.io/snoowrap/snoowrap.html
 // https://www.reddit.com/dev/api/
 
-// TODO:
-// - Customizable intervals
-// - Exponential backoff
-// - Crash at https://github.com/not-an-aardvark/snoowrap/blob/443583c97b8754c559112ee5fe4abfa8c46ad8cc/src/request_handler.js#L78
+// TODO Customizable intervals
+// TODO Exponential backoff
+// TODO Crash at https://github.com/not-an-aardvark/snoowrap/blob/443583c97b8754c559112ee5fe4abfa8c46ad8cc/src/request_handler.js#L78
 
 export default class SnoowrapIngest extends IngestSource {
 

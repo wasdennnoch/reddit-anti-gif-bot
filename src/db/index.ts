@@ -22,6 +22,20 @@ interface ExceptionData {
     duration: number | null;
 }
 
+interface ExceptionEntryInput {
+    type: LocationTypes;
+    location: string;
+    source: ExceptionSources;
+    reason?: string;
+    creationTimestamp: number;
+    duration?: number;
+}
+
+interface ExceptionEntry extends ExceptionEntryInput {
+    id: number;
+    endTimestamp: number;
+}
+
 interface ExceptionList {
     [LocationTypes.SUBREDDIT]: string[];
     [LocationTypes.USER]: string[];
@@ -69,6 +83,8 @@ export default class Database {
         return this.postgres;
     }
 
+    // TODO all these configs should me moved out of redis
+
     public async getIngestSourceOrder(): Promise<string[]> {
         return JSON.parse(await this.redis.get("ingestSourceOrder") || "[]");
     }
@@ -81,7 +97,6 @@ export default class Database {
         await this.redis.hset("customGifSizeThresholds", `${type}-${location}`, threshold);
     }
 
-    // TODO May be a bit better to turn this into a hash with the fields gifPost|gifComment
     public async getReplyTemplates(type: ReplyTypes): Promise<ReplyTemplate> {
         return JSON.parse(await this.redis.hget("replyTemplates", type) || "{}");
     }
@@ -110,77 +125,32 @@ export default class Database {
         await this.redis.set(`cache-${gifUrl}`, item === "err" ? "err" : JSON.stringify(item), "EX", 60 * 60 * 24 * 30); // 30 days
     }
 
-    // TODO duration is never checked anywhere to expire
-    // tslint:disable-next-line:max-line-length
-    public async addException(type: LocationTypes, location: string, source: ExceptionSources, reason: string | null, timestamp: number, duration?: number): Promise<void> {
-        await this.redis.hset("exceptions", `${type}-${location}`, JSON.stringify({
-            source,
-            reason: reason || null,
-            timestamp,
-            duration: duration || null,
-        }));
-    }
-
-    public async getAllExceptions(type?: LocationTypes): Promise<ExceptionData[]> {
-        let exceptions = [];
-        if (type) {
-            let cursor = 0;
-            do {
-                const res = await this.redis.hscan("exceptions", cursor, "MATCH", `${type.replace(/\?\*\[\]\^\-/g, "\\$&")}-*`, "COUNT", 100);
-                cursor = res[0];
-                exceptions.push(...res[1]);
-            } while (cursor !== 0);
-        } else {
-            exceptions = await this.redis.hgetall("exceptions");
+    public async addException(data: ExceptionEntryInput): Promise<void> {
+        if (data.duration && !data.creationTimestamp) {
+            throw new Error("Can't use duration without creationTimestamp");
         }
-        const previousFields = new Map<string, boolean>();
-        const finalData: ExceptionData[] = [];
-        let currentField: string = ""; // ="" because shut up linter
-        for (let i = 0; i < exceptions.length; i++) {
-            const item = exceptions[i];
-            if (i % 2 === 0) {
-                currentField = item;
-            } else {
-                // Dedupe the items since hscan can return the same item multiple times according to the Redis docs
-                if (previousFields.has(currentField)) {
-                    continue;
-                }
-                previousFields.set(currentField, true);
-                const [t, l] = currentField.split("-");
-                finalData.push({
-                    type: t,
-                    location: l,
-                    ...JSON.parse(item),
-                });
-            }
-        }
-        return finalData;
-    }
-
-    public async getExceptions(): Promise<ExceptionList> {
-        const keys = await this.redis.hkeys("exceptions") as string[];
-        const res = {
-            [LocationTypes.SUBREDDIT]: [],
-            [LocationTypes.USER]: [],
-            [LocationTypes.DOMAIN]: [],
-        } as ExceptionList;
-        for (const key of keys) {
-            const [type, location] = key.split("-");
-            res[type as LocationTypes].push(location);
-        }
-        return res;
-    }
-
-    public async getExceptionCount(): Promise<number> {
-        return this.redis.hlen("exceptions");
+        await this.insertItemIntoPostgres("exceptions", {
+            ...data,
+            endTimestamp: data.creationTimestamp && data.duration ? data.creationTimestamp + data.duration : null,
+        });
     }
 
     public async isException(type: LocationTypes, location: string): Promise<boolean> {
-        return Boolean(await this.redis.hexists("exceptions", `${type}-${location}`));
+        const res = await this.postgres.query(`
+            SELECT COUNT(*) FROM exceptions
+                WHERE type=$1
+                AND location=$2
+                AND (endTimestamp IS NULL OR endTimestamp > now());`, [type, location]);
+        return +res.rows[0].count > 0;
     }
 
-    public async removeException(type: LocationTypes, location: string): Promise<void> {
-        await this.redis.hdel("exceptions", `${type}-${location}`);
+    // Should only be called by DB classes!
+    public async insertItemIntoPostgres(tableName: string, data: object) {
+        const entries = Object.entries(data).filter(e => e[1] !== undefined && e[1] !== null);
+        const keys = entries.map(e => e[0]);
+        const values = entries.map(v => v[1]);
+        const valuesTemplate = Object.keys(keys).map(k => `$${1 + +k}`).join(", ");
+        await this.postgres.query(`INSERT INTO ${tableName}(${keys.join(", ")}) VALUES(${valuesTemplate});`, values);
     }
 
     private async setupDB() {

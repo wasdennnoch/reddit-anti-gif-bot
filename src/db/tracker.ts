@@ -110,6 +110,7 @@ export default class Tracker {
             const queue = updateQueue;
             this.clearQueue();
             const redisPipeline = this.db.redisRaw.pipeline(); // Or .multi() ?
+            // TODO This should be persisted into postgres as well
             redisPipeline.incrby("allSubmissionsCount", queue.allSubmissionsCount);
             redisPipeline.incrby("allCommentsCount", queue.allCommentsCount);
             redisPipeline.incrby("allInboxCount", queue.allInboxCount);
@@ -121,12 +122,8 @@ export default class Tracker {
             this.applyItemLocationCounts(redisPipeline, "gifCommentSubredditStats", queue.subredditGifCommentCounts);
             await redisPipeline.exec();
             for (const item of queue.trackingItems) {
-                const entries = Object.entries(item).filter(e => e[1] !== undefined && e[1] !== null);
-                const keys = entries.map(e => e[0]);
-                const values = entries.map(v => v[1]);
-                const valueTemplate = Object.keys(keys).map(k => `$${1 + +k}`).join(", ");
                 try {
-                    await this.db.postgresRaw.query(`INSERT INTO gifStats(${keys.join(", ")}) VALUES(${valueTemplate})`, values);
+                    await this.db.insertItemIntoPostgres("gifStats", item);
                 } catch (e) {
                     Logger.error(Tracker.TAG, "Unexpected error while interting TrackingItem", e);
                 }
