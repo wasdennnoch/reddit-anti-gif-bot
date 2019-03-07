@@ -16,8 +16,8 @@ export default class BotUtils {
     public async assembleReply(url: URL2, itemData: GifItemData, itemType: ItemTypes, subreddit: string | "dm"): Promise<string> {
         const mp4BiggerThanGif = itemData.mp4Size > itemData.gifSize;
         const webmBiggerThanMp4 = itemData.webmSize !== undefined && itemData.webmSize > itemData.mp4Size;
-        const possiblyNoisy = (await this.db.getPossiblyNoisyDomains()).includes(url.domain);
-        const temporaryGif = (await this.db.getTemporaryGifDomains()).includes(url.domain);
+        const possiblyNoisy = await this.db.isPossiblyNoisyDomain(url.domain);
+        const temporaryGif = await this.db.isTemporaryGifDomain(url.domain);
         const replyTemplates = await this.getReplyTemplatesForItemType(itemType);
         const replyPartsDefault = replyTemplates.parts.default;
         const replyPartsSpecific = replyTemplates.parts[subreddit];
