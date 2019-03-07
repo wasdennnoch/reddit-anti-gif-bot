@@ -1,5 +1,4 @@
-import IORedis = require("ioredis");
-import Database from ".";
+import Database, { RedditStatsEntryInput } from ".";
 import URL2 from "../bot/url2";
 import Logger from "../logger";
 import { ItemTypes } from "../types";
@@ -37,9 +36,9 @@ export enum TrackingErrorDetails {
 interface TrackingItemEntry {
     id: number;
     itemType: ItemTypes;
-    timestampCreated: Date;
-    timestampStart: Date;
-    timestampEnd: Date;
+    createdAt: Date;
+    startedAt: Date;
+    endedAt: Date;
     status: TrackingStatus;
     redditId: string;
     subreddit?: string;
@@ -62,9 +61,9 @@ interface UpdateCache {
     allSubmissionsCount: number;
     allCommentsCount: number;
     allInboxCount: number;
-    totalGifSubmissions: number;
-    totalGifComments: number;
-    totalGifInbox: number;
+    gifSubmissionsCount: number;
+    gifCommentsCount: number;
+    gifInboxCount: number;
     domainCounts: ItemLocationCounts;
     subredditGifSubmissionCounts: ItemLocationCounts;
     subredditGifCommentCounts: ItemLocationCounts;
@@ -95,9 +94,9 @@ export default class Tracker {
             allSubmissionsCount: 0,
             allCommentsCount: 0,
             allInboxCount: 0,
-            totalGifSubmissions: 0,
-            totalGifComments: 0,
-            totalGifInbox: 0,
+            gifSubmissionsCount: 0,
+            gifCommentsCount: 0,
+            gifInboxCount: 0,
             domainCounts: {},
             subredditGifSubmissionCounts: {},
             subredditGifCommentCounts: {},
@@ -109,18 +108,18 @@ export default class Tracker {
         try {
             const queue = updateQueue;
             this.clearQueue();
-            const redisPipeline = this.db.redisRaw.pipeline(); // Or .multi() ?
-            // TODO This should be persisted into postgres as well
-            redisPipeline.incrby("allSubmissionsCount", queue.allSubmissionsCount);
-            redisPipeline.incrby("allCommentsCount", queue.allCommentsCount);
-            redisPipeline.incrby("allInboxCount", queue.allInboxCount);
-            redisPipeline.incrby("totalGifSubmissions", queue.totalGifSubmissions);
-            redisPipeline.incrby("totalGifComments", queue.totalGifComments);
-            redisPipeline.incrby("totalGifInbox", queue.totalGifInbox);
-            this.applyItemLocationCounts(redisPipeline, "gifDomainStats", queue.domainCounts);
-            this.applyItemLocationCounts(redisPipeline, "gifSubredditStats", queue.subredditGifSubmissionCounts);
-            this.applyItemLocationCounts(redisPipeline, "gifCommentSubredditStats", queue.subredditGifCommentCounts);
-            await redisPipeline.exec();
+            const now = Date.now();
+            await this.db.insertRedditStatsItems([
+                { key: "allSubmissionsCount", value: queue.allSubmissionsCount },
+                { key: "allCommentsCount", value: queue.allCommentsCount },
+                { key: "allInboxCount", value: queue.allInboxCount },
+                { key: "gifSubmissionsCount", value: queue.gifSubmissionsCount },
+                { key: "gifCommentsCount", value: queue.gifCommentsCount },
+                { key: "gifInboxCount", value: queue.gifInboxCount },
+                ...this.itemLocationCountsToRedditStatsEntrys("gifDomainStats", queue.domainCounts),
+                ...this.itemLocationCountsToRedditStatsEntrys("gifSubredditStats", queue.subredditGifSubmissionCounts),
+                ...this.itemLocationCountsToRedditStatsEntrys("gifCommentSubredditStats", queue.subredditGifCommentCounts),
+            ], now);
             for (const item of queue.trackingItems) {
                 try {
                     await this.db.insertItemIntoPostgres("gifStats", item);
@@ -134,10 +133,13 @@ export default class Tracker {
         this.queueLoop();
     }
 
-    private applyItemLocationCounts(redis: IORedis.Pipeline, key: string, counts: ItemLocationCounts) {
-        for (const [k, v] of Object.entries(counts)) {
-            redis.hincrby(key, k, v);
+    private itemLocationCountsToRedditStatsEntrys(key: string, counts: ItemLocationCounts): RedditStatsEntryInput[] {
+        const data = [];
+        for (const [key2, value] of Object.entries(counts)) {
+            // TODO previously those were hincrby. In general the stats here now track only updates, without aggregation of total values.
+            data.push({ key, key2, value });
         }
+        return data;
     }
 
     private queueLoop() {
@@ -169,15 +171,15 @@ export default class Tracker {
         const sub = subreddit as string;
         switch (type) {
             case ItemTypes.SUBMISSION:
-                updateQueue.totalGifSubmissions++;
+                updateQueue.gifSubmissionsCount++;
                 updateQueue.subredditGifSubmissionCounts[sub] = (updateQueue.subredditGifSubmissionCounts[sub] || 0) + 1;
                 break;
             case ItemTypes.COMMENT:
-                updateQueue.totalGifComments++;
+                updateQueue.gifCommentsCount++;
                 updateQueue.subredditGifCommentCounts[sub] = (updateQueue.subredditGifCommentCounts[sub] || 0) + 1;
                 break;
             case ItemTypes.INBOX:
-                updateQueue.totalGifInbox++;
+                updateQueue.gifInboxCount++;
                 break;
             default:
                 Logger.warn(Tracker.TAG, `trackNewGifItem: Unknown item type '${type}'`);
@@ -203,8 +205,8 @@ export class ItemTracker {
     constructor(type: ItemTypes, gifUrl: URL2, redditId: string, subreddit: string | undefined, timeCreated: Date, timeStart: Date = new Date()) {
         this.data = {
             itemType: type,
-            timestampCreated: timeCreated,
-            timestampStart: timeStart,
+            createdAt: timeCreated,
+            startedAt: timeStart,
             redditId,
             subreddit,
             gifLink: gifUrl.href,
@@ -223,7 +225,7 @@ export class ItemTracker {
         }
     }
 
-    public endTracking(status: TrackingStatus, finalUpdates?: Partial<TrackingItemEntry>, timestampEnd: Date = new Date()): void {
+    public endTracking(status: TrackingStatus, finalUpdates?: Partial<TrackingItemEntry>, endDate: Date = new Date()): void {
         if (this.trackingStopped) {
             throw new Error(`Already ended tracking for item ${this.data.redditId}`);
         }
@@ -233,10 +235,10 @@ export class ItemTracker {
         }
         const data = this.data as TrackingItemEntry;
         data.status = status;
-        data.timestampEnd = timestampEnd;
+        data.endedAt = endDate;
         Logger.verbose("Tracker", `[${data.redditId}] Status: ${data.status} | GIF: ${getReadableFileSize(data.gifSize) || "-"} | ` +
             `MP4: ${getReadableFileSize(data.mp4Size) || "-"} | WebM: ${getReadableFileSize(data.webmSize) || "-"} | ` +
-            `UploadTime: ${data.uploadTime || "-"} | ProcessingTime: ${+data.timestampEnd - +data.timestampStart} | ` +
+            `UploadTime: ${data.uploadTime || "-"} | ProcessingTime: ${+data.endedAt - +data.startedAt} | ` +
             `Cached: ${data.fromCache === null || data.fromCache === undefined ? "-" : data.fromCache}`);
         updateQueue.trackingItems.push(data);
     }

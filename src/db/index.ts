@@ -13,27 +13,30 @@ export enum ExceptionSources {
     UNKNOWN = "unknown",
 }
 
-interface ExceptionData {
-    type: LocationTypes;
-    location: string;
-    source: ExceptionSources;
-    reason: string | null;
-    timestamp: number;
-    duration: number | null;
-}
-
-interface ExceptionEntryInput {
+export interface ExceptionEntryInput {
     type: LocationTypes;
     location: string;
     source: ExceptionSources;
     reason?: string;
-    creationTimestamp: number;
+    createdAt: number;
     duration?: number;
 }
 
 interface ExceptionEntry extends ExceptionEntryInput {
     id: number;
-    endTimestamp: number;
+    endsAt: number;
+}
+
+export interface RedditStatsEntryInput {
+    createdAt?: number;
+    key: string;
+    key2?: string;
+    value: number;
+}
+
+interface RedditStatsEntry extends RedditStatsEntryInput {
+    id: number;
+    createdAt: number;
 }
 
 interface ExceptionList {
@@ -83,34 +86,28 @@ export default class Database {
         return this.postgres;
     }
 
-    // TODO all these configs should me moved out of redis
-
     public async getIngestSourceOrder(): Promise<string[]> {
-        return JSON.parse(await this.redis.get("ingestSourceOrder") || "[]");
+        return JSON.parse(await this.getSetting("ingestSourceOrder") || "[]");
     }
 
     public async getGifSizeThreshold(type: LocationTypes, location: string): Promise<number> {
-        return +(await this.redis.hget("customGifSizeThresholds", `${type}-${location}`) || await this.redis.get("defaultGifSizeThreshold") || 2_000_000);
-    }
-
-    public async setCustomGifSizeThreshold(type: LocationTypes, location: string, threshold: number): Promise<void> {
-        await this.redis.hset("customGifSizeThresholds", `${type}-${location}`, threshold);
+        return +(await this.getSetting("customGifSizeThresholds", `${type}-${location}`) || await this.getSetting("defaultGifSizeThreshold") || 2_000_000);
     }
 
     public async getReplyTemplates(type: ReplyTypes): Promise<ReplyTemplate> {
-        return JSON.parse(await this.redis.hget("replyTemplates", type) || "{}");
+        return JSON.parse(await this.getSetting("replyTemplates", type) || "{}");
     }
 
-    public async getMp4BiggerAllowedDomains(): Promise<string[]> {
-        return JSON.parse(await this.redis.get("mp4BiggerAllowedDomains") || "[]");
+    public async isMp4BiggerAllowedDomain(domain: string): Promise<boolean> {
+        return await this.getSettingsCount("mp4BiggerAllowedDomain", domain) > 0;
     }
 
-    public async getPossiblyNoisyDomains(): Promise<string[]> {
-        return JSON.parse(await this.redis.get("possiblyNoisyDomains") || "[]");
+    public async isPossiblyNoisyDomain(domain: string): Promise<boolean> {
+        return await this.getSettingsCount("possiblyNoisyDomain", domain) > 0;
     }
 
-    public async getTemporaryGifDomains(): Promise<string[]> {
-        return JSON.parse(await this.redis.get("temporaryGifDomains") || "[]");
+    public async isTemporaryGifDomain(domain: string): Promise<boolean> {
+        return await this.getSettingsCount("temporaryGifDomain", domain) > 0;
     }
 
     public async getCachedLink(gifUrl: string): Promise<GifItemData | "err" | null> {
@@ -126,12 +123,12 @@ export default class Database {
     }
 
     public async addException(data: ExceptionEntryInput): Promise<void> {
-        if (data.duration && !data.creationTimestamp) {
-            throw new Error("Can't use duration without creationTimestamp");
+        if (data.duration && !data.createdAt) {
+            throw new Error("Can't use duration without createdAt");
         }
         await this.insertItemIntoPostgres("exceptions", {
             ...data,
-            endTimestamp: data.creationTimestamp && data.duration ? data.creationTimestamp + data.duration : null,
+            endsAt: data.createdAt && data.duration ? data.createdAt + data.duration : null,
         });
     }
 
@@ -140,35 +137,73 @@ export default class Database {
             SELECT COUNT(*) FROM exceptions
                 WHERE type=$1
                 AND location=$2
-                AND (endTimestamp IS NULL OR endTimestamp > now());`, [type, location]);
+                AND (endsAt IS NULL OR endsAt > now());`, [type, location.toLowerCase()]);
         return +res.rows[0].count > 0;
     }
 
+    private async getSettingsCount(key: string, value: string): Promise<number> {
+        const res = await this.postgres.query("SELECT COUNT(*) FROM settings WHERE key=$1 AND value=$2;", [key, value]);
+        return +res.rows[0].count;
+    }
+
+    private async getSetting(key: string, key2?: string): Promise<string | null> {
+        let query = "SELECT value FROM settings WHERE key=$1";
+        const opts = [key];
+        if (key2) {
+            query += " AND key2=$2";
+            opts.push(key2);
+        }
+        const res = await this.postgres.query(`${query};`, opts);
+        if (res.rows[0]) {
+            return res.rows[0].value;
+        }
+        return null;
+    }
+
     // Should only be called by DB classes!
-    public async insertItemIntoPostgres(tableName: string, data: object) {
+    public async insertItemIntoPostgres(tableName: string, data: object): Promise<void> {
         const entries = Object.entries(data).filter(e => e[1] !== undefined && e[1] !== null);
         const keys = entries.map(e => e[0]);
         const values = entries.map(v => v[1]);
         const valuesTemplate = Object.keys(keys).map(k => `$${1 + +k}`).join(", ");
-        await this.postgres.query(`INSERT INTO ${tableName}(${keys.join(", ")}) VALUES(${valuesTemplate});`, values);
+        await this.postgres.query(`INSERT INTO ${tableName} (${keys.join(", ")}) VALUES (${valuesTemplate});`, values);
     }
 
-    private async setupDB() {
-        if (!await this.redis.get("setup")) {
-            await this.redis.set("setup", true);
-            await this.redis.set("ingestSourceOrder", '["snoowrap"]');
-            await this.redis.set("defaultGifSizeThreshold", 2_000_000);
-            await this.redis.set("mp4BiggerAllowedDomains", "[]");
-            await this.redis.set("possiblyNoisyDomains", "[]");
-            await this.redis.set("temporaryGifDomains", "[]");
+    // Should only be called by DB classes!
+    public async insertRedditStatsItems(data: RedditStatsEntryInput[], defaultTimestamp: number = Date.now()): Promise<void> {
+        const values = [];
+        const valuesTemplates = [];
+        let nextTemplateIndex = 1;
+        for (const d of data) {
+            values.push(d.key);
+            values.push(d.value);
+            values.push(d.createdAt || defaultTimestamp);
+            let valuesTemplate = `($${nextTemplateIndex++}, $${nextTemplateIndex++}, $${nextTemplateIndex++}`;
+            if (d.key2) {
+                values.push(d.key2);
+                valuesTemplate += `, $${nextTemplateIndex++}`;
+            }
+            valuesTemplate += `)`;
+            valuesTemplates.push(valuesTemplate);
+        }
+        await this.postgres.query(`INSERT INTO redditStats (key, value, createdAt, key2) VALUES ${valuesTemplates.join(", ")};`, values);
+    }
+
+    private async setupDB(): Promise<void> {
+        if (!await this.getSettingsCount("setup", "true")) {
+            await this.postgres.query("INSERT INTO settings (key, value) VALUES ($1, $2);", ["setup", "true"]);
+            await this.postgres.query("INSERT INTO settings (key, value) VALUES ($1, $2);", ["ingestSourceOrder", '["snoowrap"]']);
+            await this.postgres.query("INSERT INTO settings (key, value) VALUES ($1, $2);", ["defaultGifSizeThreshold", "2_000_000"]);
             const emptyReplyTemplate = JSON.stringify({
                 base: "",
                 parts: {
                     default: {},
                 },
             });
-            await this.redis.hset("replyTemplates", ReplyTypes.GIF_POST, emptyReplyTemplate);
-            await this.redis.hset("replyTemplates", ReplyTypes.GIF_COMMENT, emptyReplyTemplate);
+            await this.postgres.query(
+                "INSERT INTO settings (key, key2, value) VALUES ($1, $2, $2);", ["replyTemplates", ReplyTypes.GIF_POST, emptyReplyTemplate]);
+            await this.postgres.query(
+                "INSERT INTO settings (key, key2, value) VALUES ($1, $2, $2);", ["replyTemplates", ReplyTypes.GIF_COMMENT, emptyReplyTemplate]);
         }
     }
 

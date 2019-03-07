@@ -80,7 +80,7 @@ export default class BotUtils {
                     type: LocationTypes.SUBREDDIT,
                     location: subreddit,
                     source: ExceptionSources.BAN_ERROR,
-                    creationTimestamp: Date.now(),
+                    createdAt: Date.now(),
                 });
                 return tracker.endTracking(TrackingStatus.ERROR, {
                     errorCode: TrackingItemErrorCodes.REPLY_BAN,
