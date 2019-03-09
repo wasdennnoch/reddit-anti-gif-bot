@@ -10,7 +10,7 @@ export const delay = (ms: number): Promise<void> => {
 
 export const getReadableFileSize = (bytes: number | null | undefined): string => {
     if (bytes === null || bytes === undefined) {
-        return "";
+        return "0 bytes";
     }
     let i = 0;
     while (bytes >= 1000 && i < byteSizeUnits.length - 1) {

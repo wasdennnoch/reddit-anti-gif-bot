@@ -18,17 +18,17 @@ export interface ExceptionEntryInput {
     location: string;
     source: ExceptionSources;
     reason?: string;
-    createdAt: number;
+    createdAt: Date;
     duration?: number;
 }
 
 interface ExceptionEntry extends ExceptionEntryInput {
     id: number;
-    endsAt: number;
+    endsAt: Date;
 }
 
 export interface RedditStatsEntryInput {
-    createdAt?: number;
+    createdAt?: Date;
     key: string;
     key2?: string;
     value: number;
@@ -36,7 +36,7 @@ export interface RedditStatsEntryInput {
 
 interface RedditStatsEntry extends RedditStatsEntryInput {
     id: number;
-    createdAt: number;
+    createdAt: Date;
 }
 
 interface ExceptionList {
@@ -128,7 +128,7 @@ export default class Database {
         }
         await this.insertItemIntoPostgres("exceptions", {
             ...data,
-            endsAt: data.createdAt && data.duration ? data.createdAt + data.duration : null,
+            endsAt: data.createdAt && data.duration ? new Date(+data.createdAt + data.duration) : null,
         });
     }
 
@@ -170,30 +170,26 @@ export default class Database {
     }
 
     // Should only be called by DB classes!
-    public async insertRedditStatsItems(data: RedditStatsEntryInput[], defaultTimestamp: number = Date.now()): Promise<void> {
+    public async insertRedditStatsItems(data: RedditStatsEntryInput[], defaultTimestamp: Date = new Date()): Promise<void> {
         const values = [];
         const valuesTemplates = [];
-        let nextTemplateIndex = 1;
+        let templateIndex = 1;
         for (const d of data) {
             values.push(d.key);
             values.push(d.value);
             values.push(d.createdAt || defaultTimestamp);
-            let valuesTemplate = `($${nextTemplateIndex++}, $${nextTemplateIndex++}, $${nextTemplateIndex++}`;
-            if (d.key2) {
-                values.push(d.key2);
-                valuesTemplate += `, $${nextTemplateIndex++}`;
-            }
-            valuesTemplate += `)`;
-            valuesTemplates.push(valuesTemplate);
+            values.push(d.key2 || null);
+            valuesTemplates.push(`($${templateIndex}, $${templateIndex + 1}, $${templateIndex + 2}, $${templateIndex + 3})`);
+            templateIndex += 4;
         }
         await this.postgres.query(`INSERT INTO redditStats (key, value, createdAt, key2) VALUES ${valuesTemplates.join(", ")};`, values);
     }
 
     private async setupDB(): Promise<void> {
         if (!await this.getSettingsCount("setup", "true")) {
-            await this.postgres.query("INSERT INTO settings (key, value) VALUES ($1, $2);", ["setup", "true"]);
+            Logger.info(Database.TAG, "Setting up default database values...");
             await this.postgres.query("INSERT INTO settings (key, value) VALUES ($1, $2);", ["ingestSourceOrder", '["snoowrap"]']);
-            await this.postgres.query("INSERT INTO settings (key, value) VALUES ($1, $2);", ["defaultGifSizeThreshold", "2_000_000"]);
+            await this.postgres.query("INSERT INTO settings (key, value) VALUES ($1, $2);", ["defaultGifSizeThreshold", "2000000"]);
             const emptyReplyTemplate = JSON.stringify({
                 base: "",
                 parts: {
@@ -201,9 +197,10 @@ export default class Database {
                 },
             });
             await this.postgres.query(
-                "INSERT INTO settings (key, key2, value) VALUES ($1, $2, $2);", ["replyTemplates", ReplyTypes.GIF_POST, emptyReplyTemplate]);
+                "INSERT INTO settings (key, key2, value) VALUES ($1, $2, $3);", ["replyTemplates", ReplyTypes.GIF_POST, emptyReplyTemplate]);
             await this.postgres.query(
-                "INSERT INTO settings (key, key2, value) VALUES ($1, $2, $2);", ["replyTemplates", ReplyTypes.GIF_COMMENT, emptyReplyTemplate]);
+                "INSERT INTO settings (key, key2, value) VALUES ($1, $2, $3);", ["replyTemplates", ReplyTypes.GIF_COMMENT, emptyReplyTemplate]);
+            await this.postgres.query("INSERT INTO settings (key, value) VALUES ($1, $2);", ["setup", "true"]);
         }
     }
 

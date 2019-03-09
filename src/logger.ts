@@ -61,7 +61,8 @@ export default class Logger {
 
     private static log(level: LogLevels, tag: string, message: string, error?: Error): void {
         const l = Logger.getColoredLevelName(level);
-        console.log(`[${new Date().toISOString()}] ${l}/${tag}: ${Logger.colorMessage(message)}`, error || ""); // tslint:disable-line no-console
+        // tslint:disable-next-line:no-console
+        console.log(`[${new Date().toISOString()}] ${l}/${tag}: ${Logger.colorMessage(message)}`, error || "");
     }
 
     private static getColoredLevelName(level: LogLevels): string {

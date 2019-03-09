@@ -3,6 +3,7 @@ import Database from "../db";
 import Tracker, { ItemTracker, TrackingItemErrorCodes, TrackingStatus } from "../db/tracker";
 import Logger from "../logger";
 import { ItemTypes, LocationTypes } from "../types";
+import { getReadableFileSize } from "../utils";
 import BotUtils from "./botUtils";
 import GifConverter from "./gifConverter";
 import URL2 from "./url2";
@@ -117,7 +118,7 @@ export default class AntiGifBot {
     }
 
     private async _processSubmission(submission: Submission, url: URL2, subreddit: string, itemId: string, tracker: ItemTracker): Promise<void> {
-        Logger.debug(AntiGifBot.TAG, `[${itemId}] -> Identified as GIF link | Subreddit: ${subreddit} | Link: ${url.href}`);
+        Logger.verbose(AntiGifBot.TAG, `[${itemId}] -> Identified as GIF link | Subreddit: ${subreddit} | Link: ${url.href}`);
         const gifConverter = new GifConverter(this.db, url, itemId, `https://redd.it/${itemId}`, submission.over_18, tracker, subreddit, submission);
         const [
             isSubredditException,
@@ -145,7 +146,8 @@ export default class AntiGifBot {
 
         const mp4BiggerThanGif = itemData.mp4Size > itemData.gifSize;
         if (mp4BiggerThanGif && !await this.db.isMp4BiggerAllowedDomain(url.domain)) {
-            Logger.info(AntiGifBot.TAG, `[${itemId}] MP4 is bigger than GIF (MP4: ${itemData.mp4Size}, GIF: ${itemData.gifSize})`);
+            // tslint:disable-next-line:max-line-length
+            Logger.info(AntiGifBot.TAG, `[${itemId}] MP4 is bigger than GIF (MP4: ${getReadableFileSize(itemData.mp4Size)} (${itemData.mp4Size}), GIF: ${getReadableFileSize(itemData.gifSize)} (${itemData.gifSize}))`);
             return tracker.endTracking(TrackingStatus.IGNORED, { errorCode: TrackingItemErrorCodes.MP4_BIGGER_THAN_GIF });
         }
 

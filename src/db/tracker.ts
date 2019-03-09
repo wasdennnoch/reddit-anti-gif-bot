@@ -20,6 +20,7 @@ export enum TrackingItemErrorCodes {
     HEAD_FAILED_GIF = "head-failed-gif",         // The HEAD request(s) to the gif file failed (invalid url/host unreachabe etc)
     HEAD_FAILED_MP4 = "head-failed-mp4",         // The HEAD request(s) to the mp4 file failed (invalid url/host unreachabe etc)
     MP4_BIGGER_THAN_GIF = "mp4-bigger-than-gif", // The MP4 file was bigger than the gif while when it was not allowed to be
+    CACHED = "cached",                           // When the link was processed previously an error occurred and it will not be processed again
     TRACKER_NOT_ENDED = "tracker-not-ended",     // The endTracking method was never called after processing finished - this should not happen!
     UNKNOWN = "unknown",
 }
@@ -80,7 +81,7 @@ export default class Tracker {
 
     private static readonly TAG = "Tracker";
 
-    private loopTimeout?: NodeJS.Timeout;
+    private loopInterval?: NodeJS.Timeout;
 
     constructor(readonly db: Database) {
         this.loop = this.loop.bind(this);
@@ -106,9 +107,9 @@ export default class Tracker {
 
     private async loop() {
         try {
+            const now = new Date();
             const queue = updateQueue;
             this.clearQueue();
-            const now = Date.now();
             await this.db.insertRedditStatsItems([
                 { key: "allSubmissionsCount", value: queue.allSubmissionsCount },
                 { key: "allCommentsCount", value: queue.allCommentsCount },
@@ -130,7 +131,6 @@ export default class Tracker {
         } catch (e) {
             Logger.error(Tracker.TAG, "Unexpected error while processing tracking queue", e);
         }
-        this.queueLoop();
     }
 
     private itemLocationCountsToRedditStatsEntrys(key: string, counts: ItemLocationCounts): RedditStatsEntryInput[] {
@@ -143,8 +143,8 @@ export default class Tracker {
     }
 
     private queueLoop() {
-        if (!this.loopTimeout) {
-            this.loopTimeout = setTimeout(this.loop, 1000);
+        if (!this.loopInterval) {
+            this.loopInterval = setInterval(this.loop, 60 * 1000);
         }
     }
 
@@ -165,7 +165,8 @@ export default class Tracker {
         }
     }
 
-    public static trackNewGifItem(type: ItemTypes, gifUrl: URL2, redditId: string, subreddit: string | undefined, timeCreated: Date, timeStart: Date = new Date()): ItemTracker { // tslint:disable-line max-line-length
+    // tslint:disable-next-line:max-line-length
+    public static trackNewGifItem(type: ItemTypes, gifUrl: URL2, redditId: string, subreddit: string | undefined, timeCreated: Date, timeStart: Date = new Date()): ItemTracker {
         const host = gifUrl.hostname;
         updateQueue.domainCounts[host] = (updateQueue.domainCounts[host] || 0) + 1;
         const sub = subreddit as string;
@@ -236,7 +237,7 @@ export class ItemTracker {
         const data = this.data as TrackingItemEntry;
         data.status = status;
         data.endedAt = endDate;
-        Logger.verbose("Tracker", `[${data.redditId}] Status: ${data.status} | GIF: ${getReadableFileSize(data.gifSize) || "-"} | ` +
+        Logger.debug("Tracker", `[${data.redditId}] Status: ${data.status} | GIF: ${getReadableFileSize(data.gifSize) || "-"} | ` +
             `MP4: ${getReadableFileSize(data.mp4Size) || "-"} | WebM: ${getReadableFileSize(data.webmSize) || "-"} | ` +
             `UploadTime: ${data.uploadTime || "-"} | ProcessingTime: ${+data.endedAt - +data.startedAt} | ` +
             `Cached: ${data.fromCache === null || data.fromCache === undefined ? "-" : data.fromCache}`);

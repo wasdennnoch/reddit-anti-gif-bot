@@ -5,11 +5,12 @@ import Database from "../db";
 import { ItemTracker, TrackingErrorDetails, TrackingItemErrorCodes, TrackingStatus } from "../db/tracker";
 import Logger from "../logger";
 import { LocationTypes } from "../types";
-import { delay, version } from "../utils";
+import { delay, getReadableFileSize, version } from "../utils";
 import URL2 from "./url2";
 
+const generalMP4DeferRetryCount = 10;
 const generalDeferDelayTime = 15000;
-const iReddItDeferRetryCount = 20;
+const iReddItDeferRetryCount = 10;
 const iReddItDeferDelayTime = 15000;
 const gfycatUploadStatusCheckRetryCount = 450;
 const gfycatUploadStatusCheckDelay = 2000;
@@ -75,7 +76,7 @@ export default class GifConverter {
 
     public async getItemData(uploadIfNecessary: boolean = true): Promise<GifItemData | null> {
         if (!await this.init()) {
-            Logger.debug(GifConverter.TAG, `[${this.itemId}] Initialization faied!`);
+            Logger.warn(GifConverter.TAG, `[${this.itemId}] Initialization faied!`);
             await this.saveErrorToCache();
             return null;
         }
@@ -84,7 +85,8 @@ export default class GifConverter {
             await this.trackCachedLink();
             return this.itemData;
         } else if (this.ignoreItemBasedOnCache) {
-            Logger.debug(GifConverter.TAG, `[${this.itemId}] Ignoring item based on cached error`);
+            Logger.verbose(GifConverter.TAG, `[${this.itemId}] Ignoring item based on cached error`);
+            this.tracker.endTracking(TrackingStatus.ERROR, { errorCode: TrackingItemErrorCodes.CACHED });
             return null;
         }
         this.tracker.updateData({ fromCache: false });
@@ -111,7 +113,7 @@ export default class GifConverter {
                     errorDetail: TrackingErrorDetails.MAX_RETRY_COUNT_REACHED,
                     errorExtra: "no-upload",
                 });
-                Logger.debug(GifConverter.TAG, `[${this.itemId}] Not uploading gif, no mp4 data will be available`);
+                Logger.verbose(GifConverter.TAG, `[${this.itemId}] Not uploading gif, no mp4 data will be available`);
                 return null;
             }
         }
@@ -183,11 +185,12 @@ export default class GifConverter {
     private async compareGifSizeThreshold(gifSize: number): Promise<boolean> {
         const gifSizeThreshold = await this.db.getGifSizeThreshold(LocationTypes.SUBREDDIT, this.subreddit);
         if (gifSize < gifSizeThreshold) {
-            Logger.debug(GifConverter.TAG, `[${this.itemId}] GIF content length too small with ${gifSize} < ${gifSizeThreshold}`);
+            // tslint:disable-next-line:max-line-length
+            Logger.verbose(GifConverter.TAG, `[${this.itemId}] GIF content length too small with ${getReadableFileSize(gifSize)} (${gifSize}) < ${getReadableFileSize(gifSizeThreshold)} (${gifSizeThreshold})`);
             this.tracker.endTracking(TrackingStatus.IGNORED, { errorCode: TrackingItemErrorCodes.GIF_TOO_SMALL });
             return false;
         }
-        Logger.debug(GifConverter.TAG, `[${this.itemId}] GIF link identified with size ${gifSize}`);
+        Logger.verbose(GifConverter.TAG, `[${this.itemId}] GIF link identified with size ${getReadableFileSize(gifSize)} (${gifSize})`);
         return true;
     }
 
@@ -204,11 +207,12 @@ export default class GifConverter {
             gfyId: this.mp4Url.pathname.slice(1),
         });
         const item = details.gfyItem;
-        Logger.debug(GifConverter.TAG, `[${this.itemId}] Gfycat info returned gifSize ${item.gifSize}, previous HEAD was ${gifContentLength}`);
+        // tslint:disable-next-line:max-line-length
+        Logger.verbose(GifConverter.TAG, `[${this.itemId}] Gfycat info returned gifSize ${getReadableFileSize(item.gifSize)} (${item.gifSize}), previous HEAD was ${getReadableFileSize(gifContentLength)} (${gifContentLength})`);
         this.itemData = {
             mp4Link: this.mp4Url.href,
             mp4DisplayLink: this.mp4DisplayUrl ? this.mp4DisplayUrl.href : undefined,
-            // TODO Apparently gfyItem.gifSize is null sometimes
+            // TODO Apparently gfyItem.gifSize is always undefined immediately after an upload
             gifSize: item.gifSize || gifContentLength || -1,
             mp4Size: item.mp4Size,
             webmSize: item.webmSize,
@@ -230,7 +234,8 @@ export default class GifConverter {
             });
             return false;
         }
-        Logger.debug(GifConverter.TAG, `[${this.itemId}] MP4 link identified with size ${this.mp4UrlCheck.contentLength}`);
+        // tslint:disable-next-line:max-line-length
+        Logger.verbose(GifConverter.TAG, `[${this.itemId}] MP4 link identified with size ${getReadableFileSize(this.mp4UrlCheck.contentLength)} (${this.mp4UrlCheck.contentLength})`);
         return true;
     }
 
@@ -238,6 +243,10 @@ export default class GifConverter {
     // This method transforms such known URLs if required.
     private async getDirectGifUrl(): Promise<URL2 | null> {
         const url = this.gifUrl;
+        if (url.username || url.password) {
+            Logger.debug(GifConverter.TAG, `[${this.itemId}] Ignoring item because of username/password specified in the URL`);
+            return null;
+        }
         let result = url.href;
         if (url.domain === "giphy.com") {
             // Note: https://i.giphy.com/JIX9t2j0ZTN9S.mp4 === https://i.giphy.com/media/JIX9t2j0ZTN9S/giphy.mp4 (extension-independent)
@@ -287,7 +296,10 @@ export default class GifConverter {
             return new URL2(url.href.replace(/\.gif$/, ".mp4"));
         }
         if (url.domain === "gfycat.com") {
-            return new URL2(url.href.replace(/(thumbs|giant|fat|zippy)\./, "")
+            const copy = new URL2(url.href);
+            copy.search = "";
+            copy.hash = "";
+            return new URL2(copy.href.replace(/(thumbs|giant|fat|zippy)\./, "")
                 .replace(/(-size_restricted|-small|-max-14?mb|-100px)?(\.gif)$/, ""));
         }
         let submission = this.submission;
@@ -300,7 +312,7 @@ export default class GifConverter {
                     return new URL2(mp4Link);
                 } catch {
                     // tslint:disable-next-line:max-line-length
-                    Logger.debug(GifConverter.TAG, `[${submission.id}] No reddit mp4 preview found, ${retryCount + 1 < iReddItDeferRetryCount ? "retrying after delay" : "aborting"}`);
+                    Logger.verbose(GifConverter.TAG, `[${submission.id}] No reddit mp4 preview found, ${retryCount + 1 < iReddItDeferRetryCount ? "retrying after delay" : "aborting"}`);
                     // ignore and try again
                 }
                 if (retryCount + 1 < iReddItDeferRetryCount) {
@@ -327,12 +339,13 @@ export default class GifConverter {
         if (!this.mp4Url) {
             throw new Error(`Can't check non-existent mp4 url for gif ${this.gifUrl.href}`);
         }
-        this.mp4UrlCheck = await this.fetchUrlInfo(this.mp4Url, TrackingItemErrorCodes.HEAD_FAILED_MP4, "video/mp4", 10);
+        this.mp4UrlCheck = await this.fetchUrlInfo(this.mp4Url, TrackingItemErrorCodes.HEAD_FAILED_MP4, "video/mp4", generalMP4DeferRetryCount);
     }
 
-    private async fetchUrlInfo(url: URL2, errorCode: TrackingItemErrorCodes, expectType?: string | undefined, maxRetryCount: number = 1): Promise<UrlCheckResult | null> { // tslint:disable-line max-line-length
+    // tslint:disable-next-line:max-line-length
+    private async fetchUrlInfo(url: URL2, errorCode: TrackingItemErrorCodes, expectType?: string | undefined, maxRetryCount: number = 1): Promise<UrlCheckResult | null> {
         for (let retryCount = 0; retryCount < maxRetryCount; retryCount++) {
-            Logger.debug(GifConverter.TAG, `[${this.itemId}] Checking url ${url.href}`);
+            Logger.verbose(GifConverter.TAG, `[${this.itemId}] Checking url ${url.href}`);
             const linkData = await this.checkUrlHead(url, expectType);
             if (linkData.error) {
                 Logger.info(GifConverter.TAG, `[${this.itemId}] Unexpected error from url fetch`, linkData.error);
@@ -352,8 +365,6 @@ export default class GifConverter {
                         errorExtra: `${linkData.statusCode} ${linkData.statusText}`,
                     });
                     return null;
-                } else {
-                    Logger.debug(GifConverter.TAG, `[${this.itemId}] Got 404 url status, ${retryCount + 1 < maxRetryCount ? "retrying" : "aborting"}`);
                 }
             }
             if (!linkData.expectedType) {
@@ -365,9 +376,10 @@ export default class GifConverter {
                 });
                 return null;
             }
-            if (linkData) {
+            if (linkData.statusCode !== 404) {
                 return linkData;
             } else if (retryCount + 1 < maxRetryCount) {
+                Logger.verbose(GifConverter.TAG, `[${this.itemId}] Got 404 url status, ${retryCount + 1 < maxRetryCount ? "retrying" : "aborting"}`);
                 await delay(generalDeferDelayTime);
             }
         }
@@ -433,7 +445,7 @@ export default class GifConverter {
     }
 
     private async uploadGif(): Promise<void> {
-        Logger.debug(GifConverter.TAG, `[${this.itemId}] Uploading GIF...`);
+        Logger.verbose(GifConverter.TAG, `[${this.itemId}] Uploading GIF...`);
         const startTime = Date.now();
         const uploadResult = await gfycat.upload({
             fetchUrl: this.directGifUrl.href,
@@ -448,13 +460,13 @@ export default class GifConverter {
                     uploadTime,
                 });
                 const gfyLink = `https://gfycat.com/${result.gfyname}`;
-                Logger.debug(GifConverter.TAG, `[${this.itemId}] Uploaded GIF in ${uploadTime} ms, available at ${gfyLink}`);
+                Logger.verbose(GifConverter.TAG, `[${this.itemId}] Uploaded GIF in ${uploadTime} ms, available at ${gfyLink}`);
                 this.mp4Url = new URL2(gfyLink);
                 return;
             } else if (result.task === "encoding") {
                 await delay(gfycatUploadStatusCheckDelay);
             } else {
-                throw new Error(`Unexpected gfycat status result for upload '${uploadResult}': ${result}`);
+                throw new Error(`Unexpected gfycat status result for upload '${JSON.stringify(uploadResult)}': ${JSON.stringify(result)}`);
             }
         }
         throw new Error(`Failed to fetch converted video from gfycat within the time limits`);

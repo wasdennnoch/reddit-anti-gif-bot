@@ -80,7 +80,7 @@ export default class BotUtils {
                     type: LocationTypes.SUBREDDIT,
                     location: subreddit,
                     source: ExceptionSources.BAN_ERROR,
-                    createdAt: Date.now(),
+                    createdAt: new Date(),
                 });
                 return tracker.endTracking(TrackingStatus.ERROR, {
                     errorCode: TrackingItemErrorCodes.REPLY_BAN,
@@ -90,7 +90,7 @@ export default class BotUtils {
                 // Rate Limit: Parse time to wait...
                 const waitTime = this.parseWaitTimeFromRateLimit(err.message);
                 Logger.debug(BotUtils.TAG, `[${itemId}] Reply: Got rate limited, waiting ${waitTime} ms`);
-                delay(waitTime);
+                await delay(waitTime);
                 // ...and try to reply again
                 return await this.doReply(replyTo, replyText, tracker, itemId, subreddit);
             }
