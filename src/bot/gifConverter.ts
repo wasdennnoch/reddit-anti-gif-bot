@@ -5,7 +5,7 @@ import Database from "../db";
 import { ItemTracker, TrackingErrorDetails, TrackingItemErrorCodes, TrackingStatus } from "../db/tracker";
 import Logger from "../logger";
 import { LocationTypes } from "../types";
-import { delay, getReadableFileSize, version } from "../utils";
+import { delay, getReadableFileSize, removeURLParams, version } from "../utils";
 import URL2 from "./url2";
 
 const generalMP4DeferRetryCount = 10;
@@ -82,6 +82,7 @@ export default class GifConverter {
         }
         await this.fetchCachedLink();
         if (this.itemData) {
+            Logger.verbose(GifConverter.TAG, `[${this.itemId}] Found item in cache`);
             await this.trackCachedLink();
             return this.itemData;
         } else if (this.ignoreItemBasedOnCache) {
@@ -107,11 +108,13 @@ export default class GifConverter {
         if (!this.mp4Url) {
             if (uploadIfNecessary) {
                 await this.uploadGif();
+                if (!this.mp4Url) {
+                    return null;
+                }
             } else {
                 this.tracker.endTracking(TrackingStatus.ERROR, {
                     errorCode: TrackingItemErrorCodes.NO_MP4_LOCATION,
-                    errorDetail: TrackingErrorDetails.MAX_RETRY_COUNT_REACHED,
-                    errorExtra: "no-upload",
+                    errorDetail: TrackingErrorDetails.NO_UPLOAD,
                 });
                 Logger.verbose(GifConverter.TAG, `[${this.itemId}] Not uploading gif, no mp4 data will be available`);
                 return null;
@@ -242,19 +245,20 @@ export default class GifConverter {
     // Some URLs embed gifs but aren't actually the direct link to the gif.
     // This method transforms such known URLs if required.
     private async getDirectGifUrl(): Promise<URL2 | null> {
-        const url = this.gifUrl;
+        let url = this.gifUrl;
         if (url.username || url.password) {
             Logger.debug(GifConverter.TAG, `[${this.itemId}] Ignoring item because of username/password specified in the URL`);
             return null;
         }
-        let result = url.href;
+        let result: string;
         if (url.domain === "giphy.com") {
+            url = removeURLParams(url);
             // Note: https://i.giphy.com/JIX9t2j0ZTN9S.mp4 === https://i.giphy.com/media/JIX9t2j0ZTN9S/giphy.mp4 (extension-independent)
             if (/^(eph)?media[0-9]?/.test(url.subdomain) || url.href.includes("i.giphy.com/media/")) {
                 // https://media2.giphy.com/media/JIX9t2j0ZTN9S/200w.webp => https://i.giphy.com/JIX9t2j0ZTN9S.gif
                 result = url.href.substring(0, url.href.lastIndexOf("/")).replace(/[a-z0-9]+\.giphy.com\/media/, "i.giphy.com") + ".gif";
             } else if (url.subdomain === "i") {
-                // 'i.' means it's a direct link, hoever not nexessarily a .gif link
+                // 'i.' means it's a direct link, hoever not necessarily a .gif link
                 result = url.href.replace(/\.webm$/, ".gif");
             } else {
                 // Actual website
@@ -274,6 +278,7 @@ export default class GifConverter {
                 result = link + ".gif";
             }
         } else if (url.domain === "gph.is") {
+            url = removeURLParams(url);
             // Giphy URL shortener
             const loc = await this.getRedirectLocation(url);
             if (loc === null || loc === "http://giphy.com/") {
@@ -287,6 +292,8 @@ export default class GifConverter {
                 return null;
             }
             result = loc;
+        } else {
+            result = url.href;
         }
         return new URL2(result);
     }
@@ -296,10 +303,7 @@ export default class GifConverter {
             return new URL2(url.href.replace(/\.gif$/, ".mp4"));
         }
         if (url.domain === "gfycat.com") {
-            const copy = new URL2(url.href);
-            copy.search = "";
-            copy.hash = "";
-            return new URL2(copy.href.replace(/(thumbs|giant|fat|zippy)\./, "")
+            return new URL2(removeURLParams(url).href.replace(/(thumbs|giant|fat|zippy)\./, "")
                 .replace(/(-size_restricted|-small|-max-14?mb|-100px)?(\.gif)$/, ""));
         }
         let submission = this.submission;
@@ -465,6 +469,15 @@ export default class GifConverter {
                 return;
             } else if (result.task === "encoding") {
                 await delay(gfycatUploadStatusCheckDelay);
+            } else if (result.task === "error" || result.task === "NotFoundo") {
+                // tslint:disable-next-line:max-line-length
+                Logger.warn(GifConverter.TAG, `[${this.itemId}] Gif upload failed with task result '${result.task}' and description '${result.errorMessage ? result.errorMessage.description : "<unknown>"}'`);
+                this.tracker.endTracking(TrackingStatus.ERROR, {
+                    errorCode: TrackingItemErrorCodes.NO_MP4_LOCATION,
+                    errorDetail: TrackingErrorDetails.GFYCAT_ERROR,
+                    errorExtra: JSON.stringify(result.errorMessage),
+                });
+                return;
             } else {
                 throw new Error(`Unexpected gfycat status result for upload '${JSON.stringify(uploadResult)}': ${JSON.stringify(result)}`);
             }

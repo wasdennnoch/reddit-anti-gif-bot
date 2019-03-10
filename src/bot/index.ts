@@ -90,10 +90,12 @@ export default class AntiGifBot {
         } catch (e) {
             Logger.error(AntiGifBot.TAG, `[${submission.id}] Unexpected error while processing submission`, e);
             if (tracker) {
-                tracker.endTracking(TrackingStatus.ERROR, {
-                    errorCode: TrackingItemErrorCodes.UNKNOWN,
-                    errorExtra: e.stack,
-                });
+                if (!tracker.trackingEnded) {
+                    tracker.endTracking(TrackingStatus.ERROR, {
+                        errorCode: TrackingItemErrorCodes.UNKNOWN,
+                        errorExtra: e.stack,
+                    });
+                }
             }
         }
     }
@@ -134,12 +136,15 @@ export default class AntiGifBot {
                 // Still track gif sizes
                 await gifConverter.getItemData(false);
             }
-            return tracker.endTracking(TrackingStatus.IGNORED);
+            if (!tracker.trackingEnded) {
+                tracker.endTracking(TrackingStatus.IGNORED);
+            }
+            return;
         }
 
         const itemData = await gifConverter.getItemData();
         if (!itemData) {
-            Logger.info(AntiGifBot.TAG, `[${itemId}] Ignoring item based on GifConverter result`);
+            Logger.debug(AntiGifBot.TAG, `[${itemId}] Ignoring item based on GifConverter result`);
             // Error handling has already been done
             return;
         }
@@ -148,7 +153,8 @@ export default class AntiGifBot {
         if (mp4BiggerThanGif && !await this.db.isMp4BiggerAllowedDomain(url.domain)) {
             // tslint:disable-next-line:max-line-length
             Logger.info(AntiGifBot.TAG, `[${itemId}] MP4 is bigger than GIF (MP4: ${getReadableFileSize(itemData.mp4Size)} (${itemData.mp4Size}), GIF: ${getReadableFileSize(itemData.gifSize)} (${itemData.gifSize}))`);
-            return tracker.endTracking(TrackingStatus.IGNORED, { errorCode: TrackingItemErrorCodes.MP4_BIGGER_THAN_GIF });
+            tracker.endTracking(TrackingStatus.IGNORED, { errorCode: TrackingItemErrorCodes.MP4_BIGGER_THAN_GIF });
+            return;
         }
 
         await this.botUtils.createReplyAndReply(url, itemData, ItemTypes.SUBMISSION, submission, tracker, itemId, subreddit);

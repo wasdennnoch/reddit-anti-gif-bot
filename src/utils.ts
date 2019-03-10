@@ -1,4 +1,5 @@
 import * as pkg from "../package.json";
+import URL2 from "./bot/url2.js";
 
 const byteSizeUnits = ["Bytes", "KB", "MB", "GB", "TB", "PB", "EB (Exabyte)", "ZB (Zettayte)", "YB (Yottabyte)", "XB (Xenottabyte)"];
 
@@ -29,4 +30,11 @@ export const toFixedFixed = (num: number, decimals = 2): string => {
         return rounded;
     }
     return `${integer}.${fraction.padEnd(decimals, "0")}`;
+};
+
+export const removeURLParams = (url: URL2): URL2 => {
+    const copy = new URL2(url.href);
+    copy.search = "";
+    copy.hash = "";
+    return copy;
 };

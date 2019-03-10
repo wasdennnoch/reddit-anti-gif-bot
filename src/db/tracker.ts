@@ -31,7 +31,9 @@ export enum TrackingErrorDetails {
     CONTENT_TYPE = "content-type",
     CONTENT_LENGTH = "content-length",
     MAX_RETRY_COUNT_REACHED = "max-retry-count-reached",
+    NO_UPLOAD = "no-upload",
     REDIRECT_FAIL = "redirect-fail",
+    GFYCAT_ERROR = "gfycat-error",
 }
 
 interface TrackingItemEntry {
@@ -136,7 +138,6 @@ export default class Tracker {
     private itemLocationCountsToRedditStatsEntrys(key: string, counts: ItemLocationCounts): RedditStatsEntryInput[] {
         const data = [];
         for (const [key2, value] of Object.entries(counts)) {
-            // TODO previously those were hincrby. In general the stats here now track only updates, without aggregation of total values.
             data.push({ key, key2, value });
         }
         return data;

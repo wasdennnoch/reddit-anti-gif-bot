@@ -24,7 +24,7 @@ export interface ExceptionEntryInput {
 
 interface ExceptionEntry extends ExceptionEntryInput {
     id: number;
-    endsAt: Date;
+    endsAt?: Date;
 }
 
 export interface RedditStatsEntryInput {
