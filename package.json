@@ -16,22 +16,22 @@
     "node": ">=10.10.0"
   },
   "dependencies": {
-    "dotenv": "^6.2.0",
+    "dotenv": "^7.0.0",
     "gfycat-sdk": "^1.4.18",
-    "ioredis": "^4.6.2",
+    "ioredis": "^4.9.0",
     "node-fetch": "^2.3.0",
-    "pg": "^7.8.1",
+    "pg": "^7.9.0",
     "snoowrap": "^1.15.2",
-    "tldts": "^4.0.2",
+    "tldts": "^4.0.5",
     "winston": "^2.4.4"
   },
   "devDependencies": {
-    "@types/ioredis": "^4.0.8",
-    "@types/node": "^10.12.26",
-    "@types/node-fetch": "^2.1.6",
-    "@types/pg": "^7.4.13",
+    "@types/ioredis": "^4.0.10",
+    "@types/node": "^10.14.4",
+    "@types/node-fetch": "^2.1.7",
+    "@types/pg": "^7.4.14",
     "@types/snoowrap": "^1.16.1",
-    "tslint": "^5.12.1",
-    "typescript": "^3.3.3"
+    "tslint": "^5.15.0",
+    "typescript": "^3.4.1"
   }
 }
