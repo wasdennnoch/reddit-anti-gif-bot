@@ -35,13 +35,13 @@ async function runBot() {
         bot.addSubmission(submission);
     });
 
-    /*ingest.setCommentCallback((comment: Comment) => {
+    ingest.setCommentCallback((comment: Comment) => {
         bot.addComment(comment);
     });
 
     ingest.setInboxCallback((message: PrivateMessage) => {
         bot.addInbox(message);
-    });*/
+    });
 
     Logger.debug(TAG, "Starting bot and ingest...");
     await bot.start();

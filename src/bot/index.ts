@@ -5,10 +5,10 @@ import Logger from "../logger";
 import { ItemTypes, LocationTypes } from "../types";
 import { getReadableFileSize } from "../utils";
 import BotUtils from "./botUtils";
-import GifConverter from "./gifConverter";
+import GifConverter, { GifItemData } from "./gifConverter";
 import URL2 from "./url2";
 
-// const urlRegex = /https?:\/\/[a-z.]+\/[^)\]\s]+(?=[\s)\].])?/gi; // To extract links in comments
+const urlRegex = /https?:\/\/[a-z.]+\/[^)\]\s]+(?=[\s)\].])?/gi; // To extract links from a string
 
 export default class AntiGifBot {
 
@@ -77,10 +77,12 @@ export default class AntiGifBot {
             try {
                 url = new URL2(submission.url);
             } catch {
+                Logger.debug(AntiGifBot.TAG, `[${submission.id}] Could not decode submission URL "${submission.url}"`);
                 return; // gg
             }
-            const itemId = submission.id;
+            const itemId = submission.name;
             const subreddit = submission.subreddit.display_name;
+            // TODO extract URLs from the submission _body_ just like with Comments
             if (submission.is_self || submission.over_18 || submission.locked || submission.quarantine || !this.botUtils.shouldHandleUrl(url)) {
                 return;
             }
@@ -101,27 +103,63 @@ export default class AntiGifBot {
     }
 
     private async processComment(comment: Comment): Promise<void> {
+        const trackers: ItemTracker[] = [];
         try {
             Tracker.trackNewIncomingItem(ItemTypes.COMMENT);
-            if (await this.db.isException(LocationTypes.USER, comment.author.name)) {
+            const subreddit = comment.subreddit.display_name;
+            const itemId = comment.name;
+            const content = comment.body;
+            const matches = content.match(urlRegex);
+            // TODO ability to "summon" the bot
+            if (!matches || !matches.length || (comment as any).over_18 || (comment as any).quarantine) { // Thank you TS definitions
+                // comment.locked doesn't exist but should ideally also be checked somehow
                 return;
             }
+            const urls = [];
+            for (const link of matches) {
+                let url;
+                try {
+                    url = new URL2(link);
+                } catch {
+                    Logger.debug(AntiGifBot.TAG, `[${comment.id}] Could not decode comment URL "${link}"`);
+                    continue; // gg
+                }
+                if (!this.botUtils.shouldHandleUrl(url)) {
+                    continue;
+                }
+                urls.push(url);
+                trackers.push(Tracker.trackNewGifItem(ItemTypes.COMMENT, url, itemId, subreddit, new Date(comment.created_utc * 1000)));
+            }
+            await this._processComment(comment, urls, subreddit, itemId, trackers);
+            for (const tracker of trackers) {
+                Tracker.ensureTrackingEnded(tracker);
+            }
+
         } catch (e) {
             Logger.error(AntiGifBot.TAG, `[${comment.id}] Unexpected error while processing comment`, e);
+            for (const tracker of trackers) {
+                if (!tracker.trackingEnded) {
+                    tracker.endTracking(TrackingStatus.ERROR, {
+                        errorCode: TrackingItemErrorCodes.UNKNOWN,
+                        errorExtra: e.stack,
+                    });
+                }
+            }
         }
     }
 
     private async processInbox(message: PrivateMessage): Promise<void> {
         try {
             Tracker.trackNewIncomingItem(ItemTypes.INBOX);
+            await this._processInbox(message);
         } catch (e) {
             Logger.error(AntiGifBot.TAG, `[${message.id}] Unexpected error while processing message`, e);
         }
     }
 
     private async _processSubmission(submission: Submission, url: URL2, subreddit: string, itemId: string, tracker: ItemTracker): Promise<void> {
-        Logger.verbose(AntiGifBot.TAG, `[${itemId}] -> Identified as GIF link | Subreddit: ${subreddit} | Link: ${url.href}`);
-        const gifConverter = new GifConverter(this.db, url, itemId, `https://redd.it/${itemId}`, submission.over_18, tracker, subreddit, submission);
+        Logger.verbose(AntiGifBot.TAG, `[${itemId}] -> Identified submission as GIF link | Subreddit: ${subreddit} | Link: ${url.href}`);
+        const gifConverter = new GifConverter(this.db, url, itemId, `https://redd.it/${submission.id}`, submission.over_18, tracker, subreddit, submission);
         const [
             isSubredditException,
             isDomainException,
@@ -157,7 +195,93 @@ export default class AntiGifBot {
             return;
         }
 
-        await this.botUtils.createReplyAndReply(url, itemData, ItemTypes.SUBMISSION, submission, tracker, itemId, subreddit);
+        await this.botUtils.createReplyAndReply([itemData], ItemTypes.SUBMISSION, submission, [tracker], itemId, subreddit);
+    }
+
+    // TODO In its current form this would send a new reply for every gif link in a comment if there were multiple ones.
+    // BIG NOPE!
+    private async _processComment(comment: Comment, urls: URL2[], subreddit: string, itemId: string, trackers: ItemTracker[]): Promise<void> {
+        Logger.verbose(AntiGifBot.TAG, `[${itemId}] -> Identified comment with GIF links | Subreddit: ${subreddit} | Link count: ${urls.length}`);
+        const fullLink = `https://reddit.com/r/${subreddit}/comments/${comment.link_id}/_/${comment.id}/`;
+        const [
+            isSubredditException,
+            isUserException,
+        ] = await Promise.all([
+            this.db.isException(LocationTypes.SUBREDDIT, subreddit),
+            this.db.isException(LocationTypes.USER, comment.author.name),
+        ]);
+        const processedItemData: GifItemData[] = [];
+        const processedTrackers: ItemTracker[] = [];
+
+        for (let i = 0; i < urls.length; i++) {
+            const url = urls[i];
+            const tracker = trackers[i];
+            Logger.verbose(AntiGifBot.TAG, `[${itemId}] -> Identified comment link as GIF link | Subreddit: ${subreddit} | Link: ${url.href}`);
+            const gifConverter = new GifConverter(this.db, url, itemId, fullLink, (comment as any).over_18, tracker, subreddit); // Thank you TS definitions
+            if (isSubredditException || isUserException) {
+                // Still track gif sizes
+                await this._processURL(gifConverter, url, true, tracker);
+                if (!tracker.trackingEnded) {
+                    tracker.endTracking(TrackingStatus.IGNORED);
+                }
+                continue;
+            }
+
+            const itemData = await this._processURL(gifConverter, url, false, tracker);
+            if (!itemData) {
+                Logger.debug(AntiGifBot.TAG, `[${itemId}] Ignoring item based on GifConverter result`);
+                // Error handling has already been done
+                continue;
+            }
+
+            const mp4BiggerThanGif = itemData.mp4Size > itemData.gifSize;
+            if (mp4BiggerThanGif && !await this.db.isMp4BiggerAllowedDomain(url.domain)) {
+                // tslint:disable-next-line:max-line-length
+                Logger.info(AntiGifBot.TAG, `[${itemId}] MP4 is bigger than GIF (MP4: ${getReadableFileSize(itemData.mp4Size)} (${itemData.mp4Size}), GIF: ${getReadableFileSize(itemData.gifSize)} (${itemData.gifSize}))`);
+                tracker.endTracking(TrackingStatus.IGNORED, { errorCode: TrackingItemErrorCodes.MP4_BIGGER_THAN_GIF });
+                continue;
+            }
+
+            processedItemData.push(itemData);
+            processedTrackers.push(tracker);
+        }
+
+        if (processedItemData.length) {
+            await this.botUtils.createReplyAndReply(processedItemData, ItemTypes.COMMENT, comment, processedTrackers, itemId, subreddit);
+        }
+    }
+
+    private async _processURL(gifConverter: GifConverter, url: URL2, isException: boolean, tracker: ItemTracker): Promise<GifItemData | null> {
+        const isDomainException = this.db.isException(LocationTypes.DOMAIN, url.domain);
+        if (isException || isDomainException) {
+            if (isException) {
+                // Still track gif sizes
+                await gifConverter.getItemData(false);
+            }
+            if (!tracker.trackingEnded) {
+                tracker.endTracking(TrackingStatus.IGNORED);
+            }
+            return null;
+        }
+        const itemData = await gifConverter.getItemData();
+        return itemData;
+    }
+
+    private async _processInbox(message: PrivateMessage): Promise<void> {
+        return;
+        const author = message.author.name;
+        const subject = message.subject;
+        const content = message.body;
+        const subreddit = message.subreddit.display_name; // ?
+        const [
+            isSubredditException,
+            // isDomainException,
+            isUserException,
+        ] = await Promise.all([
+            this.db.isException(LocationTypes.SUBREDDIT, subreddit),
+            // this.db.isException(LocationTypes.DOMAIN, url.domain),
+            this.db.isException(LocationTypes.USER, author),
+        ]);
     }
 
 }

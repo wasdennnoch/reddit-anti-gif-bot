@@ -55,6 +55,7 @@ export default class GifConverter {
     private itemData?: GifItemData | null;
     private ignoreItemBasedOnCache: boolean = false;
 
+    // The `submission` object is only used to fetch the mp4 preview embedded in submissions, if available
     constructor(readonly db: Database, readonly gifUrl: URL2, readonly itemId: string, readonly itemLink: string, readonly nsfw: boolean,
         readonly tracker: ItemTracker, readonly subreddit: string, readonly submission?: Submission) {
         this.directGifUrl = gifUrl;
@@ -226,7 +227,7 @@ export default class GifConverter {
         if (!this.mp4UrlCheck) {
             throw new Error("Trying to check mp4 content length without any mp4 data");
         }
-        if (!this.mp4UrlCheck.contentLength) {
+        if (!this.mp4UrlCheck.contentLength || this.mp4UrlCheck.contentLength <= 0) {
             // TODO Might be a better way to handle this (download?)
             // Or, more importantly, how often does that actually happen? Shouldn't be very often?
             Logger.info(GifConverter.TAG, `[${this.itemId}] Unknown MP4 content length`);

@@ -44,7 +44,7 @@ export default class SnoowrapIngest extends IngestSource {
         snoowrapInstance = SnoowrapIngest.createSnoowrapInstance(),
         fetchIntervals: {
             submissions = 15000,
-            comments = 1500,
+            comments = 1750,
             inbox = 30000,
         } = {},
     }: SnoowrapIngestOptions = {}) {
@@ -146,7 +146,7 @@ export default class SnoowrapIngest extends IngestSource {
                         this.commentCallback(c);
                     }
                 } else {
-                    Logger.info(SnoowrapIngest.TAG, "Got zero comments from reddit");
+                    Logger.debug(SnoowrapIngest.TAG, "Got zero comments from reddit");
                     this.zeroResultCommentFetches++;
                     if (this.zeroResultCommentFetches > 4 && this.lastCommentId) {
                         Logger.info(SnoowrapIngest.TAG, "Got too many zero result comment fetches, resetting last comment ID");
@@ -167,7 +167,7 @@ export default class SnoowrapIngest extends IngestSource {
         if (this.inboxCallback) {
             try {
                 const inbox = await this.snoo.getUnreadMessages({
-                    limit: 50,
+                    limit: 25,
                     show: "all",
                 });
                 if (this.stopIngest) {
