@@ -204,6 +204,12 @@ export class ItemTracker {
     private data: Partial<TrackingItemEntry>;
     private trackingStopped: boolean = false;
 
+    public static endTrackingArray(trackers: ItemTracker[], status: TrackingStatus, finalUpdates?: Partial<TrackingItemEntry>): void {
+        for (const tracker of trackers) {
+            tracker.endTracking(status, finalUpdates);
+        }
+    }
+
     constructor(type: ItemTypes, gifUrl: URL2, redditId: string, subreddit: string | undefined, timeCreated: Date, timeStart: Date = new Date()) {
         this.data = {
             itemType: type,

@@ -1,0 +1,28 @@
+{
+    "default": {
+        "single": {
+            "base": "{{itemList}}\n---\n{{footer}}",
+            "footer": "*Beep, I'm a bot.* [FAQ](https://np.reddit.com/r/anti_gif_bot/wiki/index) | [author](https://np.reddit.com/message/compose?to=MrWasdennnoch) | [source](https://github.com/wasdennnoch/reddit-anti-gif-bot) | v{{version}}",
+            "listItemDivider": "",
+            "gfycatNotice": "Since this version hosted on Gfycat the best file format (MP4, WebM, big, small) will be chosen automatically.  \n",
+            "listItem": "{{sizeComparisonText}}{{webmSmallerText}}{{noiseWarning}}{{temporaryGifWarning}}",
+            "gifBiggerThanMp4": "[This MP4 version]({{mp4Link}}) is {{mp4Save}} smaller than the submitted GIF ({{mp4Size}} vs {{gifSize}}).  \n",
+            "mp4BiggerThanGif": "[This MP4 version]({{mp4Link}}) is bigger than the submitted GIF ({{mp4Size}} vs {{gifSize}}), however it should have a higher quality and frame rate.  \n",
+            "webmSmaller": "The WebM version is even {{webmSave}} smaller ({{webmSize}}).  \n",
+            "noiseWarning": "**Warning:** This MP4 might have sound.  \n",
+            "temporaryGifWarning": "OP submitted a temporary link that might be gone in the future. This version here is a permanent link.  \n"
+        },
+        "multi": {
+            "base": "This {{redditKind}} contains multiple GIF URLs. Here are MP4 alternatives:\n\n{{itemList}}\n\n---\n{{footer}}",
+            "footer": "*Beep, I'm a bot.* [FAQ](https://np.reddit.com/r/anti_gif_bot/wiki/index) | [author](https://np.reddit.com/message/compose?to=MrWasdennnoch) | [source](https://github.com/wasdennnoch/reddit-anti-gif-bot) | v{{version}}",
+            "listItemDivider": "  \n",
+            "gfycatNotice": "Content hosted on gfycat will automatically be served using the best file format (MP4, WebM, big, small).  \n",
+            "listItem": "{{index}}. [{{domain}}]({{mp4Link}}): {{sizeComparisonText}}",
+            "gifBiggerThanMp4": "The MP4 is {{mp4Save}} smaller ({{mp4Size}} vs {{gifSize}}). ",
+            "mp4BiggerThanGif": "The MP4 is bigger ({{mp4Size}} vs {{gifSize}}) but should have a better quality. ",
+            "webmSmaller": "",
+            "noiseWarning": "**Possible noise warning**. ",
+            "temporaryGifWarning": "Original link was temporary. "
+        }
+    }
+}

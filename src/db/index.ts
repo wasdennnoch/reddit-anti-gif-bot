@@ -46,11 +46,13 @@ interface ExceptionList {
 }
 
 export interface ReplyTemplate {
-    base: string;
-    parts: {
-        [subreddit: string]: {
+    [subreddit: string]: {
+        single: {
             [key: string]: string;
-        };
+        },
+        multi: {
+            [key: string]: string;
+        },
     };
 }
 
@@ -76,14 +78,6 @@ export default class Database {
         await this.redis.connect();
         await this.postgres.connect();
         await this.setupDB();
-    }
-
-    public get redisRaw(): IORedis.Redis {
-        return this.redis;
-    }
-
-    public get postgresRaw(): Client {
-        return this.postgres;
     }
 
     public async getIngestSourceOrder(): Promise<string[]> {

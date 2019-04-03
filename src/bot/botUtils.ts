@@ -13,33 +13,52 @@ export default class BotUtils {
 
     constructor(readonly db: Database) { }
 
-    public async assembleReply(url: URL2, itemData: GifItemData, itemType: ItemTypes, subreddit: string | "dm"): Promise<string> {
+    public async assembleReply(itemData: GifItemData[], itemType: ItemTypes, subreddit: string | "dm"): Promise<string> {
+        const replyTemplates = await this.getReplyTemplatesForItemType(itemType);
+        const singleOrMulti = itemType.length > 1 ? "multi" : "single";
+        const replyPartsDefault = replyTemplates.default[singleOrMulti];
+        const replyPartsSpecific = (replyTemplates[subreddit] || {})[singleOrMulti] || {};
+        const replyParts = Object.assign({}, replyPartsDefault, replyPartsSpecific);
+        let hasGfycatItem = false;
+        let listItems = "";
+        for (let i = 0; i < itemData.length; i++) {
+            const data = itemData[i];
+            if (data.webmSize) {
+                hasGfycatItem = true;
+            }
+            listItems += this.assembleReplySingleItem(replyParts, data, i + 1);
+            if (i < itemData.length - 1) { // If not the last item
+                listItems += replyParts.listItemDivider;
+            }
+        }
+        const replyText = replyParts.base
+            .replace("{{itemList}}", listItems)
+            .replace("{{footer}}", replyParts.footer)
+            .replace("{{gfycatNotice}}", hasGfycatItem ? replyParts.gfycatNotice : "")
+            .replace("{{redditKind}}", itemType)
+            .replace("{{version}}", version);
+        return replyText;
+    }
+
+    private async assembleReplySingleItem(replyParts: any, itemData: GifItemData, index: number = 1): Promise<string> {
+        const url = new URL2(itemData.mp4Link);
         const mp4BiggerThanGif = itemData.mp4Size > itemData.gifSize;
         const webmBiggerThanMp4 = itemData.webmSize !== undefined && itemData.webmSize > itemData.mp4Size;
         const possiblyNoisy = await this.db.isPossiblyNoisyDomain(url.domain);
         const temporaryGif = await this.db.isTemporaryGifDomain(url.domain);
-        const replyTemplates = await this.getReplyTemplatesForItemType(itemType);
-        const replyPartsDefault = replyTemplates.parts.default;
-        const replyPartsSpecific = replyTemplates.parts[subreddit];
-        const replyParts = Object.assign({}, replyPartsDefault, replyPartsSpecific);
-        let replyText = replyTemplates.base
+        return replyParts.listItem
             .replace("{{sizeComparisonText}}", mp4BiggerThanGif ? replyParts.mp4BiggerThanGif : replyParts.gifBiggerThanMp4)
-            .replace("{{webmSmallerText}}", !webmBiggerThanMp4 ? replyParts.webmSmallerText : "")
-            .replace("{{gfycatNotice}}", itemData.webmSize !== undefined ? replyParts.gfycatNotice : "")
+            .replace("{{webmSmallerText}}", !webmBiggerThanMp4 ? replyParts.webmSmaller : "")
             .replace("{{noiseWarning}}", possiblyNoisy ? replyParts.noiseWarning : "")
             .replace("{{temporaryGifWarning}}", temporaryGif ? replyParts.temporaryGifWarning : "")
-            .replace("{{linkContainer}}", replyParts[`linkContainer${itemData.webmSize !== undefined ? "Mirror" : "Link"}`])
+            .replace("{{index}}", `${index}`)
             .replace("{{gifSize}}", getReadableFileSize(itemData.gifSize))
             .replace("{{mp4Size}}", getReadableFileSize(itemData.mp4Size))
             .replace("{{webmSize}}", getReadableFileSize(itemData.webmSize))
             .replace("{{mp4Save}}", this.calculateSavingPercentage(itemData.gifSize, itemData.mp4Size))
             .replace("{{webmSave}}", itemData.webmSize ? this.calculateSavingPercentage(itemData.gifSize, itemData.webmSize) : "")
-            .replace("{{version}}", version)
-            .replace("{{link}}", itemData.mp4DisplayLink || itemData.mp4Link);
-        for (const [k, v] of Object.entries(replyParts)) {
-            replyText = replyText.replace(`{{${k}}}`, v || "");
-        }
-        return replyText;
+            .replace("{{mp4Link}}", itemData.mp4DisplayLink || itemData.mp4Link)
+            .replace("{{domain}}", url.domain);
     }
 
     public shouldHandleUrl(url: URL2): boolean {
@@ -56,12 +75,12 @@ export default class BotUtils {
     }
 
     // tslint:disable-next-line:max-line-length
-    public async createReplyAndReply(mp4Url: URL2, itemData: GifItemData, itemType: ItemTypes, replyTo: ReplyableContent<any>, tracker: ItemTracker, itemId: string, subreddit: string): Promise<void> {
-        const replyText = await this.assembleReply(mp4Url, itemData, itemType, subreddit);
-        await this.doReply(replyTo, replyText, tracker, itemId, subreddit);
+    public async createReplyAndReply(itemData: GifItemData[], itemType: ItemTypes, replyTo: ReplyableContent<any>, trackers: ItemTracker[], itemId: string, subreddit: string): Promise<void> {
+        const replyText = await this.assembleReply(itemData, itemType, subreddit);
+        await this.doReply(replyTo, replyText, trackers, itemId, subreddit);
     }
 
-    public async doReply(replyTo: ReplyableContent<any>, replyText: string, tracker: ItemTracker, itemId: string, subreddit: string): Promise<void> {
+    public async doReply(replyTo: ReplyableContent<any>, replyText: string, trackers: ItemTracker[], itemId: string, subreddit: string): Promise<void> {
         try {
             Logger.debug(BotUtils.TAG, `[${itemId}] Reply in ${subreddit}: ${replyText.substring(0, 150).replace(/\r?\n/g, "-\\n-")}...`);
             if (process.env.NODE_ENV === "production") {
@@ -70,7 +89,7 @@ export default class BotUtils {
                 // For debugging purposes pretend that replies sometimes fail due to rate limits
                 this.debugThrowRateLimitError();
             }
-            return tracker.endTracking(TrackingStatus.SUCCESS);
+            return ItemTracker.endTrackingArray(trackers, TrackingStatus.SUCCESS);
         } catch (err) {
 
             if (err.name === "StatusCodeError" && err.statusCode === 403 && err.error.message === "Forbidden") {
@@ -82,7 +101,7 @@ export default class BotUtils {
                     source: ExceptionSources.BAN_ERROR,
                     createdAt: new Date(),
                 });
-                return tracker.endTracking(TrackingStatus.ERROR, {
+                return ItemTracker.endTrackingArray(trackers, TrackingStatus.ERROR, {
                     errorCode: TrackingItemErrorCodes.REPLY_BAN,
                 });
 
@@ -92,18 +111,18 @@ export default class BotUtils {
                 Logger.debug(BotUtils.TAG, `[${itemId}] Reply: Got rate limited, waiting ${waitTime} ms`);
                 await delay(waitTime);
                 // ...and try to reply again
-                return await this.doReply(replyTo, replyText, tracker, itemId, subreddit);
+                return await this.doReply(replyTo, replyText, trackers, itemId, subreddit);
             }
 
             Logger.warn(BotUtils.TAG, `[${itemId}] Reply: Unknown error occurred`, err);
-            return tracker.endTracking(TrackingStatus.ERROR, {
+            return ItemTracker.endTrackingArray(trackers, TrackingStatus.ERROR, {
                 errorCode: TrackingItemErrorCodes.REPLY_FAIL,
             });
         }
     }
 
     private calculateSavingPercentage(firstSize: number, secondSize: number): string {
-        return toFixedFixed((firstSize - secondSize) / firstSize * 100);
+        return `${toFixedFixed((firstSize - secondSize) / firstSize * 100)}%`;
     }
 
     private async getReplyTemplatesForItemType(itemType: ItemTypes): Promise<ReplyTemplate> {
