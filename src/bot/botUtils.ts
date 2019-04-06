@@ -1,5 +1,5 @@
 import { ReplyableContent } from "snoowrap";
-import Database, { ExceptionSources, ReplyTemplate } from "../db";
+import Database, { ExceptionSources, ReplyTemplate, ReplyTemplates } from "../db";
 import { ItemTracker, TrackingItemErrorCodes, TrackingStatus } from "../db/tracker";
 import Logger from "../logger";
 import { ItemTypes, LocationTypes, ReplyTypes } from "../types";
@@ -18,7 +18,7 @@ export default class BotUtils {
         const singleOrMulti = itemType.length > 1 ? "multi" : "single";
         const replyPartsDefault = replyTemplates.default[singleOrMulti];
         const replyPartsSpecific = (replyTemplates[subreddit] || {})[singleOrMulti] || {};
-        const replyParts = Object.assign({}, replyPartsDefault, replyPartsSpecific);
+        const replyParts: ReplyTemplate = Object.assign({}, replyPartsDefault, replyPartsSpecific);
         let hasGfycatItem = false;
         let listItems = "";
         for (let i = 0; i < itemData.length; i++) {
@@ -40,7 +40,7 @@ export default class BotUtils {
         return replyText;
     }
 
-    private async assembleReplySingleItem(replyParts: any, itemData: GifItemData, index: number = 1): Promise<string> {
+    private async assembleReplySingleItem(replyParts: ReplyTemplate, itemData: GifItemData, index: number = 1): Promise<string> {
         const url = new URL2(itemData.mp4Link);
         const mp4BiggerThanGif = itemData.mp4Size > itemData.gifSize;
         const webmBiggerThanMp4 = itemData.webmSize !== undefined && itemData.webmSize > itemData.mp4Size;
@@ -125,7 +125,7 @@ export default class BotUtils {
         return `${toFixedFixed((firstSize - secondSize) / firstSize * 100)}%`;
     }
 
-    private async getReplyTemplatesForItemType(itemType: ItemTypes): Promise<ReplyTemplate> {
+    private async getReplyTemplatesForItemType(itemType: ItemTypes): Promise<ReplyTemplates> {
         let replyType: ReplyTypes;
         if (itemType === ItemTypes.SUBMISSION) {
             replyType = ReplyTypes.GIF_POST;

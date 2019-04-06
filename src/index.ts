@@ -20,6 +20,7 @@ async function runBot() {
     await db.init();
     const ingest = new Ingest();
     await ingest.init();
+    // The main tracker instance - do not delete!
     const tracker = new Tracker(db);
     const bot = new AntiGifBot(db);
     await bot.init();

@@ -256,7 +256,7 @@ export class ItemTracker {
             throw new Error(`Already ended tracking for item ${this.data.redditId}`);
         }
         this.trackingStopped = true;
-        // whelp
+        // Ignore and discard tracking data
     }
 
     public get trackingEnded() {

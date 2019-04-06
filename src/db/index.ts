@@ -45,15 +45,24 @@ interface ExceptionList {
     [LocationTypes.DOMAIN]: string[];
 }
 
-export interface ReplyTemplate {
+export interface ReplyTemplates {
     [subreddit: string]: {
-        single: {
-            [key: string]: string;
-        },
-        multi: {
-            [key: string]: string;
-        },
+        single: ReplyTemplate;
+        multi: ReplyTemplate;
     };
+}
+
+export interface ReplyTemplate {
+    base: string;
+    footer: string;
+    listItemDivider: string;
+    gfycatNotice: string;
+    listItem: string;
+    gifBiggerThanMp4: string;
+    mp4BiggerThanGif: string;
+    webmSmaller: string;
+    noiseWarning: string;
+    temporaryGifWarning: string;
 }
 
 export default class Database {
@@ -88,7 +97,7 @@ export default class Database {
         return +(await this.getSetting("customGifSizeThresholds", `${type}-${location}`) || await this.getSetting("defaultGifSizeThreshold") || 2_000_000);
     }
 
-    public async getReplyTemplates(type: ReplyTypes): Promise<ReplyTemplate> {
+    public async getReplyTemplates(type: ReplyTypes): Promise<ReplyTemplates> {
         return JSON.parse(await this.getSetting("replyTemplates", type) || "{}");
     }
 
