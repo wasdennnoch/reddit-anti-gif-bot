@@ -190,10 +190,15 @@ export default class Tracker {
         return new ItemTracker(type, gifUrl, redditId, subreddit, timeCreated, timeStart);
     }
 
-    public static ensureTrackingEnded(tracker: ItemTracker): void {
-        if (!tracker.trackingEnded) {
-            Logger.error(Tracker.TAG, `[${tracker.redditId}] Tracker was not ended properly! Aborting tracking.`);
-            tracker.endTracking(TrackingStatus.ERROR, { errorCode: TrackingItemErrorCodes.TRACKER_NOT_ENDED });
+    public static ensureTrackingEnded(tracker: ItemTracker | ItemTracker[]): void {
+        if (!Array.isArray(tracker)) {
+            tracker = [];
+        }
+        for (const t of tracker) {
+            if (!t.trackingEnded) {
+                Logger.error(Tracker.TAG, `[${t.redditId}] Tracker was not ended properly! Aborting tracking.`);
+                t.endTracking(TrackingStatus.ERROR, { errorCode: TrackingItemErrorCodes.TRACKER_NOT_ENDED });
+            }
         }
     }
 
@@ -204,9 +209,12 @@ export class ItemTracker {
     private data: Partial<TrackingItemEntry>;
     private trackingStopped: boolean = false;
 
-    public static endTrackingArray(trackers: ItemTracker[], status: TrackingStatus, finalUpdates?: Partial<TrackingItemEntry>): void {
+    // tslint:disable-next-line:max-line-length
+    public static endTrackingArray(trackers: ItemTracker[], status: TrackingStatus, finalUpdates?: Partial<TrackingItemEntry>, checkTrackingEnded: boolean = false): void {
         for (const tracker of trackers) {
-            tracker.endTracking(status, finalUpdates);
+            if (!checkTrackingEnded || !tracker.trackingEnded) {
+                tracker.endTracking(status, finalUpdates);
+            }
         }
     }
 
