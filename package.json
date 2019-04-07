@@ -22,8 +22,7 @@
     "node-fetch": "^2.3.0",
     "pg": "^7.9.0",
     "snoowrap": "^1.15.2",
-    "tldts": "^4.0.5",
-    "winston": "^2.4.4"
+    "tldts": "^4.0.5"
   },
   "devDependencies": {
     "@types/ioredis": "^4.0.10",
