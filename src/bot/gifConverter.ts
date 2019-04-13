@@ -41,6 +41,7 @@ if (process.env.NODE_ENV !== "production") {
     gfycat.apiVersion = "/v1test";
 }
 
+// TODO Future consideration: Download gifs for file size checks. Search for "DOWNLOAD" here.
 export default class GifConverter {
 
     private static readonly TAG = "GifConverter";
@@ -97,7 +98,7 @@ export default class GifConverter {
             await this.saveErrorToCache();
             return null;
         }
-        // TODO Try to download when it is null?
+        // DOWNLOAD Try to download when it is null?
         if (this.gifUrlCheck.contentLength !== null) {
             this.tracker.updateData({ gifSize: this.gifUrlCheck.contentLength });
             if (!await this.compareGifSizeThreshold(this.gifUrlCheck.contentLength)) {
@@ -163,7 +164,7 @@ export default class GifConverter {
         this.itemData = {
             mp4Link: this.mp4Url!.href,
             mp4DisplayLink: this.mp4DisplayUrl ? this.mp4DisplayUrl.href : undefined,
-            // TODO I _assume_ that if it's not uploaded it's from a known host which provides a length header.
+            // DOWNLOAD I _assume_ that if it's not uploaded it's from a known host which provides a length header.
             // What if no header is there unexpectedly?
             gifSize: this.gifUrlCheck.contentLength || -1,
             mp4Size: this.mp4UrlCheck.contentLength,
@@ -216,7 +217,7 @@ export default class GifConverter {
         this.itemData = {
             mp4Link: this.mp4Url.href,
             mp4DisplayLink: this.mp4DisplayUrl ? this.mp4DisplayUrl.href : undefined,
-            // TODO Apparently gfyItem.gifSize is always undefined immediately after an upload
+            // DOWNLOAD Apparently gfyItem.gifSize is always undefined immediately after an upload
             gifSize: item.gifSize || gifContentLength || -1,
             mp4Size: item.mp4Size,
             webmSize: item.webmSize,
@@ -228,7 +229,7 @@ export default class GifConverter {
             throw new Error("Trying to check mp4 content length without any mp4 data");
         }
         if (!this.mp4UrlCheck.contentLength || this.mp4UrlCheck.contentLength <= 0) {
-            // TODO Might be a better way to handle this (download?)
+            // DOWNLOAD Might be a better way to handle this (download?)
             // Or, more importantly, how often does that actually happen? Shouldn't be very often?
             Logger.info(GifConverter.TAG, `[${this.itemId}] Unknown MP4 content length`);
             this.tracker.endTracking(TrackingStatus.ERROR, {

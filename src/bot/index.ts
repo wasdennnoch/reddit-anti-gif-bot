@@ -1,5 +1,6 @@
+import Snoowrap = require("snoowrap");
 import { Comment, PrivateMessage, ReplyableContent, Submission } from "snoowrap";
-import Database from "../db";
+import Database, { ExceptionSources } from "../db";
 import Tracker, { ItemTracker, TrackingItemErrorCodes, TrackingStatus } from "../db/tracker";
 import Logger from "../logger";
 import { ItemTypes, LocationTypes } from "../types";
@@ -25,7 +26,7 @@ export default class AntiGifBot {
     private loopTimeout?: NodeJS.Timeout;
     private botUtils: BotUtils;
 
-    constructor(readonly db: Database) {
+    constructor(readonly db: Database, readonly snoo: Snoowrap) {
         this.submissionQueue = [];
         this.commentQueue = [];
         this.inboxQueue = [];
@@ -110,7 +111,6 @@ export default class AntiGifBot {
             const itemId = comment.name;
             const author = comment.author.name;
             const content = comment.body;
-            // TODO ability to "summon" the bot
             if ((comment as any).over_18 || (comment as any).quarantine) { // Thank you TS definitions
                 // comment.locked doesn't exist but should ideally also be checked somehow
                 return;
@@ -135,12 +135,100 @@ export default class AntiGifBot {
     private async processInbox(message: PrivateMessage): Promise<void> {
         try {
             Tracker.trackNewIncomingItem(ItemTypes.INBOX);
-            return;
-            const subreddit = message.subreddit.display_name; // ?
+            const subreddit = message.subreddit.display_name; // Comment reply
             const itemId = message.name;
             const author = message.author.name;
-            const content = message.body;
+            const content = message.body.replace(/\r/g, "");
             const subject = message.subject;
+            const comment = message.was_comment;
+            const distinguished = message.distinguished; // null, "mod(erator)?", "admin", "gold-auto"
+            if (subject === "excludeme") {
+                /*
+                Reason: <please enter your reason here>
+                */
+                if (await this.db.isException(LocationTypes.USER, author)) {
+                    await this.db.removeException(LocationTypes.USER, author);
+                    Logger.debug(AntiGifBot.TAG, `Removed user exception for /u/${author}`);
+                    await (message.reply([
+                        `You (/u/${author}) have been successfully removed from the user blacklist. `,
+                        "I will now reply to your gif submissions and comments again.  \n",
+                        "If you wish to not receive any replies to your posts and comments from me again, ",
+                        "please [block me](https://i.imgur.com/3bYiW2v.png) instead of adding yourself to the user blacklist. ",
+                        "More information on that can be found [in my wiki](https://reddit.com/r/anti_gif_bot/wiki/index).",
+                    ].join("")) as Promise<any>); // TS shenanigans
+                } else {
+                    await this.db.addException({
+                        type: LocationTypes.USER,
+                        location: author,
+                        source: ExceptionSources.USER_DM,
+                        reason: content || undefined,
+                        createdAt: new Date(message.created_utc * 1000),
+                    });
+                    Logger.debug(AntiGifBot.TAG, `Added user exception for /u/${author}`);
+                    await (message.reply([
+                        `You (/u/${author}) have been successfully added to the user blacklist. `,
+                        "I will not reply to any of your gif submissions or comments anymore.  \n",
+                        "Please consider [blocking me](https://i.imgur.com/3bYiW2v.png) instead of making me completely ",
+                        "ignore you - that way other users who _want_ to see my replies are still able to do so. ",
+                        "Don't forget to remove yourself from the user blacklist before blocking me! ",
+                        "More information on that can be found [in my wiki](https://reddit.com/r/anti_gif_bot/wiki/index).\n\n",
+                        "If you'd like to reverse this action, simply send me a DM with the subject `excludeme` again.",
+                    ].join("")) as Promise<any>); // TS shenanigans
+                }
+                return;
+            } else if (subject === "excludesubreddit") {
+                /*
+                r/<put your subreddit name here>
+                Reason: <please enter your reason here>
+                */
+                const lineBreak = content.indexOf("\n") || content.length;
+                const sub = content.substring(0, lineBreak).replace(/^\/?r\/<?|>$/, "").toLowerCase();
+                const reason = content.substring(lineBreak + 1).trim();
+                const snooSubreddit = this.snoo.getSubreddit(sub);
+                try {
+                    const mods = await snooSubreddit.getModerators({ name: author });
+                    if (!mods.length || mods[0].name !== author) {
+                        return await (message.reply([
+                            `It appears that you (/u/${author}) are not a moderator of /r/${sub}. `,
+                            "I will only manage subreddit exclusions made by moderators.\n\n",
+                            "If you believe this is an error please contact /u/MrWasdennnoch.",
+                        ].join("")) as Promise<any>); // TS shenanigans
+                    }
+                } catch (e) {
+                    Logger.info(AntiGifBot.TAG, `Error fetching exclusion data for /r/${sub}, possibly doesn't exist`, e);
+                    return await (message.reply([
+                        `It appears that /r/${sub} does not exist. Please specify a valid subreddit that you moderate.\n\n`,
+                        "If you believe this is an error please contact /u/MrWasdennnoch.",
+                    ].join("")) as Promise<any>); // TS shenanigans
+                }
+                if (await this.db.isException(LocationTypes.SUBREDDIT, sub)) {
+                    await this.db.removeException(LocationTypes.SUBREDDIT, sub);
+                    Logger.debug(AntiGifBot.TAG, `Removed subreddit exception for /r/${sub} by /u/${author}`);
+                    await (message.reply([
+                        `You have successfully removed /r/${sub} from the subreddit blacklist. `,
+                        "I will start replying in that subreddit again.",
+                    ].join("")) as Promise<any>); // TS shenanigans
+                } else {
+                    await this.db.addException({
+                        type: LocationTypes.SUBREDDIT,
+                        location: sub,
+                        source: ExceptionSources.USER_DM,
+                        reason: reason || undefined,
+                        createdAt: new Date(message.created_utc * 1000),
+                    });
+                    Logger.debug(AntiGifBot.TAG, `Added subreddit exception for /r/${sub} by /u/${author}`);
+                    await (message.reply([
+                        `You have successfully added /r/${sub} to the subreddit blacklist. `,
+                        "I will not reply to any gif submissions or comments in that subreddit anymore.\n\n",
+                        "If you'd like to reverse this action, simply send me a DM with the subject `excludesubreddit` ",
+                        "and the subreddit name again.",
+                    ].join("")) as Promise<any>); // TS shenanigans
+                }
+                return;
+            }
+            /* --- TODO ability to "summon" the bot ---
+            Format: Just mention? "/u/anti-gif-bot"
+            */
             const [
                 isSubredditException,
                 // isDomainException,

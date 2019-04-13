@@ -35,7 +35,7 @@ export default class SnoowrapIngest extends IngestSource {
     private lastCommentId?: string;
     private stopIngest: boolean = false;
 
-    // When you pass reddit an item ID as the `after` parameter that's too far behind (1000 items I assume)
+    // When you pass reddit an item ID as the `before` parameter that's too far behind (1000 items I assume)
     // reddit will always return 0 items. Detect if that happens and reset last ID if required.
     private zeroResultSubmissionFetches: number = 0;
     private zeroResultCommentFetches: number = 0;
@@ -187,7 +187,7 @@ export default class SnoowrapIngest extends IngestSource {
             Math.max(this.inboxFetchIntervalTime / 2, this.inboxFetchIntervalTime - (Date.now() - startTime)));
     }
 
-    private static createSnoowrapInstance(): Snoowrap {
+    public static createSnoowrapInstance(): Snoowrap {
         const s = new Snoowrap({
             userAgent: `bot:${process.env.REDDIT_USERNAME}:${botVersion} (by /u/MrWasdennnoch)`,
             clientId: process.env.REDDIT_CLIENT_ID,
@@ -198,10 +198,10 @@ export default class SnoowrapIngest extends IngestSource {
         s.config({
             requestTimeout: 4000,
             continueAfterRatelimitError: false,
-            retryErrorCodes: [999], // TODO Does that fix the crashes I experienced before?
+            retryErrorCodes: [999],
             maxRetryAttempts: 0,
             warnings: process.env.NODE_ENV !== "production",
-            debug: false, // process.env.NODE_ENV !== "production",
+            debug: false,
         });
         return s;
     }

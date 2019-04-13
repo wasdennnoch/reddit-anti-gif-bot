@@ -10,7 +10,7 @@ import IngestSource, {
 import { SnoowrapIngestOptions } from "./sources/snoowrap";
 
 export interface SourceOptions {
-    [key: string]: SnoowrapIngestOptions | object;
+    snoowrap?: SnoowrapIngestOptions;
 }
 
 interface IngestOptions {

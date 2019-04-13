@@ -144,6 +144,10 @@ export default class Database {
         return +res.rows[0].count > 0;
     }
 
+    public async removeException(type: LocationTypes, location: string): Promise<void> {
+        await this.postgres.query(`DELETE FROM exceptions WHERE type=$1 AND location=$2`, [type, location.toLowerCase()]);
+    }
+
     private async getSettingsCount(key: string, value: string): Promise<number> {
         const res = await this.postgres.query("SELECT COUNT(*) FROM settings WHERE key=$1 AND value=$2;", [key, value]);
         return +res.rows[0].count;

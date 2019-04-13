@@ -5,6 +5,7 @@ import AntiGifBot from "./bot";
 import Database from "./db";
 import Tracker from "./db/tracker";
 import Ingest from "./ingest";
+import SnoowrapIngest from "./ingest/sources/snoowrap";
 import Logger from "./logger";
 
 const TAG = "Index";
@@ -18,11 +19,18 @@ async function runBot() {
 
     const db = new Database();
     await db.init();
-    const ingest = new Ingest();
+    const snoo = SnoowrapIngest.createSnoowrapInstance();
+    const ingest = new Ingest({
+        sourceOptions: {
+            snoowrap: {
+                snoowrapInstance: snoo,
+            },
+        },
+    });
     await ingest.init();
     // The main tracker instance - do not delete!
     const tracker = new Tracker(db);
-    const bot = new AntiGifBot(db);
+    const bot = new AntiGifBot(db, snoo);
     await bot.init();
 
     await updateIngestSourceOrder(db, ingest);
