@@ -1,9 +1,9 @@
 import Snoowrap = require("snoowrap");
-import { Comment, PrivateMessage, ReplyableContent, Submission } from "snoowrap";
+import { Comment, PrivateMessage, Submission } from "snoowrap";
 import Database, { ExceptionSources } from "../db";
 import Tracker, { ItemTracker, TrackingItemErrorCodes, TrackingStatus } from "../db/tracker";
 import Logger from "../logger";
-import { ItemTypes, LocationTypes } from "../types";
+import { ItemTypes, LocationTypes, ReplyableContentWithAuthor } from "../types";
 import { getReadableFileSize } from "../utils";
 import BotUtils from "./botUtils";
 import GifConverter, { GifItemData } from "./gifConverter";
@@ -31,7 +31,7 @@ export default class AntiGifBot {
         this.commentQueue = [];
         this.inboxQueue = [];
 
-        this.botUtils = new BotUtils(db);
+        this.botUtils = new BotUtils(db, this.snoo);
 
         this.loop = this.loop.bind(this);
     }
@@ -133,6 +133,7 @@ export default class AntiGifBot {
     }
 
     private async processInbox(message: PrivateMessage): Promise<void> {
+        let trackers: ItemTracker[] = [];
         try {
             Tracker.trackNewIncomingItem(ItemTypes.INBOX);
             const subreddit = message.subreddit.display_name; // Comment reply
@@ -140,7 +141,7 @@ export default class AntiGifBot {
             const author = message.author.name;
             const content = message.body.replace(/\r/g, "");
             const subject = message.subject;
-            const comment = message.was_comment;
+            const wasComment = message.was_comment;
             const distinguished = message.distinguished; // null, "mod(erator)?", "admin", "gold-auto"
             if (subject === "excludeme") {
                 /*
@@ -226,25 +227,43 @@ export default class AntiGifBot {
                 }
                 return;
             }
-            /* --- TODO ability to "summon" the bot ---
-            Format: Just mention? "/u/anti-gif-bot"
-            */
-            const [
-                isSubredditException,
-                // isDomainException,
-                isUserException,
-            ] = await Promise.all([
-                this.db.isException(LocationTypes.SUBREDDIT, subreddit),
-                // this.db.isException(LocationTypes.DOMAIN, url.domain),
-                this.db.isException(LocationTypes.USER, author),
-            ]);
+
+            if (wasComment) {
+                // --- TODO ability to "summon" the bot ---
+                if (content.startsWith("/u/anti-gif-bot")) {
+                    // TODO basically like comment reply but with an exception override?
+                }
+            } else {
+                const extracts = await this.extractAndPrepareUrlsFromString(content, ItemTypes.INBOX, subreddit, itemId, message.created_utc);
+                trackers = extracts.trackers;
+                const onlyIgnoredItems = !await this.processRedditItem(ItemTypes.INBOX, extracts,
+                    `https://www.reddit.com/message/messages/${message.id}`,
+                    itemId, "dm", author, false, message);
+                if (onlyIgnoredItems) {
+                    await (message.reply([
+                        "It appears that your message contains URLs that I do not handle. ",
+                        "It could be that your link(s) already are mp4 links or that I do not handle those link domains.  \n",
+                        "For more information please check the [FAQ](https://reddit.com/r/anti_gif_bot/wiki/index).",
+                    ].join("")) as Promise<any>); // TS shenanigans
+                }
+            }
+            Tracker.ensureTrackingEnded(trackers);
         } catch (e) {
             Logger.error(AntiGifBot.TAG, `[${message.id}] Unexpected error while processing message`, e);
+            ItemTracker.endTrackingArray(trackers, TrackingStatus.ERROR, {
+                errorCode: TrackingItemErrorCodes.UNKNOWN,
+                errorExtra: e.stack,
+            }, true);
         }
     }
 
+    // Returns `true` if all items have been processed successfully (or if there weren't any).
+    // Returns `false` instead if there were items but all of them have been ignored due to exceptions.
     // tslint:disable-next-line:max-line-length
-    private async processRedditItem(type: ItemTypes, data: UrlTrackerMix, fullLink: string, itemId: string, subreddit: string, author: string, over18: boolean, replyTo: ReplyableContent<any>): Promise<void> {
+    private async processRedditItem(type: ItemTypes, data: UrlTrackerMix, fullLink: string, itemId: string, subreddit: string, author: string, over18: boolean, replyTo: ReplyableContentWithAuthor<any>, ignoreSubredditUserExceptions: boolean = false): Promise<boolean> {
+        if (!data.urls.length) {
+            return true;
+        }
         Logger.verbose(AntiGifBot.TAG, `[${itemId}] -> Identified ${type} with GIF links | Subreddit: ${subreddit} | Link count: ${data.urls.length}`);
         const [
             isSubredditException,
@@ -261,7 +280,7 @@ export default class AntiGifBot {
             const tracker = data.trackers[i];
             Logger.verbose(AntiGifBot.TAG, `[${itemId}] -> Identified ${type} link as GIF link | Subreddit: ${subreddit} | Link: ${url.href}`);
             const gifConverter = new GifConverter(this.db, url, itemId, fullLink, over18, tracker, subreddit);
-            if (isSubredditException || isUserException) {
+            if (!ignoreSubredditUserExceptions && (isSubredditException || isUserException)) {
                 // Still track gif sizes
                 await this._processURL(gifConverter, url, true, tracker);
                 if (!tracker.trackingEnded) {
@@ -290,8 +309,11 @@ export default class AntiGifBot {
         }
 
         if (processedItemData.length) {
-            await this.botUtils.createReplyAndReply(processedItemData, type, replyTo, processedTrackers, itemId, subreddit);
+            // tslint:disable-next-line:max-line-length
+            await this.botUtils.createReplyAndReply(processedItemData, type, replyTo, processedTrackers, itemId, subreddit, isSubredditException && ignoreSubredditUserExceptions);
+            return true;
         }
+        return false;
     }
 
     // tslint:disable-next-line:max-line-length

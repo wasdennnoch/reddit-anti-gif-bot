@@ -1,8 +1,8 @@
-import { ReplyableContent } from "snoowrap";
+import Snoowrap = require("snoowrap");
 import Database, { ExceptionSources, ReplyTemplate, ReplyTemplates } from "../db";
 import { ItemTracker, TrackingItemErrorCodes, TrackingStatus } from "../db/tracker";
 import Logger from "../logger";
-import { ItemTypes, LocationTypes, ReplyTypes } from "../types";
+import { ItemTypes, LocationTypes, ReplyableContentWithAuthor, ReplyTypes } from "../types";
 import { delay, getReadableFileSize, toFixedFixed, version } from "../utils";
 import { GifItemData } from "./gifConverter";
 import URL2 from "./url2";
@@ -11,7 +11,7 @@ export default class BotUtils {
 
     private static readonly TAG = "BotUtils";
 
-    constructor(readonly db: Database) { }
+    constructor(readonly db: Database, readonly snoo: Snoowrap) { }
 
     public async assembleReply(itemData: GifItemData[], itemType: ItemTypes, subreddit: string | "dm"): Promise<string> {
         const replyTemplates = await this.getReplyTemplatesForItemType(itemType);
@@ -75,16 +75,26 @@ export default class BotUtils {
     }
 
     // tslint:disable-next-line:max-line-length
-    public async createReplyAndReply(itemData: GifItemData[], itemType: ItemTypes, replyTo: ReplyableContent<any>, trackers: ItemTracker[], itemId: string, subreddit: string): Promise<void> {
+    public async createReplyAndReply(itemData: GifItemData[], itemType: ItemTypes, replyTo: ReplyableContentWithAuthor<any>, trackers: ItemTracker[], itemId: string, subreddit: string, sendDMInstead: boolean = false): Promise<void> {
         const replyText = await this.assembleReply(itemData, itemType, subreddit);
-        await this.doReply(replyTo, replyText, trackers, itemId, subreddit);
+        await this.doReply(replyTo, replyText, trackers, itemId, subreddit, sendDMInstead);
     }
 
-    public async doReply(replyTo: ReplyableContent<any>, replyText: string, trackers: ItemTracker[], itemId: string, subreddit: string): Promise<void> {
+    // tslint:disable-next-line:max-line-length
+    public async doReply(replyTo: ReplyableContentWithAuthor<any>, replyText: string, trackers: ItemTracker[], itemId: string, subreddit: string, sendDMInstead: boolean = false): Promise<void> {
         try {
-            Logger.debug(BotUtils.TAG, `[${itemId}] Reply in ${subreddit}: ${replyText.substring(0, 150).replace(/\r?\n/g, "-\\n-")}...`);
+            // tslint:disable-next-line:max-line-length
+            Logger.debug(BotUtils.TAG, `[${itemId}] Reply in ${subreddit} (sendDMInstead: ${sendDMInstead}): ${replyText.substring(0, 150).replace(/\r?\n/g, "-\\n-")}...`);
             if (process.env.NODE_ENV === "production") {
-                await replyTo.reply(replyText);
+                if (sendDMInstead) {
+                    await this.snoo.composeMessage({
+                        to: replyTo.author,
+                        subject: "Your requested MP4 links",
+                        text: replyText,
+                    });
+                } else {
+                    await replyTo.reply(replyText);
+                }
             } else if (Math.random() < 0.1) {
                 // For debugging purposes pretend that replies sometimes fail due to rate limits
                 this.debugThrowRateLimitError();

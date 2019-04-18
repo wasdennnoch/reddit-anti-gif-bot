@@ -1,3 +1,6 @@
+import Snoowrap = require("snoowrap");
+import { ReplyableContent } from "snoowrap";
+
 export enum LocationTypes {
     SUBREDDIT = "subreddit",
     USER = "user",
@@ -13,4 +16,11 @@ export enum ItemTypes {
 export enum ReplyTypes {
     GIF_POST = "gif-post",
     GIF_COMMENT = "gif-comment",
+}
+
+// ReplyableContent doesn't have an author object; ReplyableContent does but PrivateMessage
+// doesn't extend ReplyableContent and instead has its own author object.
+// This interface ensures that passed ReplyableContent objects have an author as well.
+export interface ReplyableContentWithAuthor<T> extends ReplyableContent<T> {
+    author: Snoowrap.RedditUser;
 }
