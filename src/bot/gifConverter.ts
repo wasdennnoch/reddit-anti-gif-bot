@@ -190,8 +190,8 @@ export default class GifConverter {
     private async compareGifSizeThreshold(gifSize: number): Promise<boolean> {
         const gifSizeThreshold = await this.db.getGifSizeThreshold(LocationTypes.SUBREDDIT, this.subreddit);
         if (gifSize < gifSizeThreshold) {
-            // tslint:disable-next-line:max-line-length
-            Logger.verbose(GifConverter.TAG, `[${this.itemId}] GIF content length too small with ${getReadableFileSize(gifSize)} (${gifSize}) < ${getReadableFileSize(gifSizeThreshold)} (${gifSizeThreshold})`);
+            Logger.verbose(GifConverter.TAG, `[${this.itemId}] GIF content length too small with ${
+                getReadableFileSize(gifSize)} (${gifSize}) < ${getReadableFileSize(gifSizeThreshold)} (${gifSizeThreshold})`);
             this.tracker.endTracking(TrackingStatus.IGNORED, { errorCode: TrackingItemErrorCodes.GIF_TOO_SMALL });
             return false;
         }
@@ -212,8 +212,9 @@ export default class GifConverter {
             gfyId: this.mp4Url.pathname.slice(1),
         });
         const item = details.gfyItem;
-        // tslint:disable-next-line:max-line-length
-        Logger.verbose(GifConverter.TAG, `[${this.itemId}] Gfycat info returned gifSize ${getReadableFileSize(item.gifSize)} (${item.gifSize}), previous HEAD was ${getReadableFileSize(gifContentLength)} (${gifContentLength})`);
+        Logger.verbose(GifConverter.TAG, `[${this.itemId}] Gfycat info returned gifSize ${
+            getReadableFileSize(item.gifSize)} (${item.gifSize}), previous HEAD was ${
+            getReadableFileSize(gifContentLength)} (${gifContentLength})`);
         this.itemData = {
             mp4Link: this.mp4Url.href,
             mp4DisplayLink: this.mp4DisplayUrl ? this.mp4DisplayUrl.href : undefined,
@@ -239,8 +240,8 @@ export default class GifConverter {
             });
             return false;
         }
-        // tslint:disable-next-line:max-line-length
-        Logger.verbose(GifConverter.TAG, `[${this.itemId}] MP4 link identified with size ${getReadableFileSize(this.mp4UrlCheck.contentLength)} (${this.mp4UrlCheck.contentLength})`);
+        Logger.verbose(GifConverter.TAG, `[${this.itemId}] MP4 link identified with size ${
+            getReadableFileSize(this.mp4UrlCheck.contentLength)} (${this.mp4UrlCheck.contentLength})`);
         return true;
     }
 
@@ -317,8 +318,8 @@ export default class GifConverter {
                     const mp4Link = submission.preview.images[0].variants.mp4.source.url; // Thanks Reddit
                     return new URL2(mp4Link);
                 } catch {
-                    // tslint:disable-next-line:max-line-length
-                    Logger.verbose(GifConverter.TAG, `[${submission.id}] No reddit mp4 preview found, ${retryCount + 1 < iReddItDeferRetryCount ? "retrying after delay" : "aborting"}`);
+                    Logger.verbose(GifConverter.TAG, `[${submission.id}] No reddit mp4 preview found, ${
+                        retryCount + 1 < iReddItDeferRetryCount ? "retrying after delay" : "aborting"}`);
                     // ignore and try again
                 }
                 if (retryCount + 1 < iReddItDeferRetryCount) {
@@ -333,7 +334,8 @@ export default class GifConverter {
 
     private async tryTransformToDisplayMp4Url(url: URL2): Promise<void> {
         if (url.domain === "giphy.com") {
-            this.mp4DisplayUrl = new URL2(url.href.replace(/i.giphy.com\/(media\/)?/, "media.giphy.com/media/").replace(/(\/giphy)?\.mp4$/, "/giphy.mp4"));
+            this.mp4DisplayUrl = new URL2(url.href.replace(/i.giphy.com\/(media\/)?/, "media.giphy.com/media/")
+                .replace(/(\/giphy)?\.mp4$/, "/giphy.mp4"));
         }
     }
 
@@ -345,11 +347,12 @@ export default class GifConverter {
         if (!this.mp4Url) {
             throw new Error(`Can't check non-existent mp4 url for gif ${this.gifUrl.href}`);
         }
-        this.mp4UrlCheck = await this.fetchUrlInfo(this.mp4Url, TrackingItemErrorCodes.HEAD_FAILED_MP4, "video/mp4", generalMP4DeferRetryCount);
+        this.mp4UrlCheck = await this.fetchUrlInfo(this.mp4Url, TrackingItemErrorCodes.HEAD_FAILED_MP4,
+            "video/mp4", generalMP4DeferRetryCount);
     }
 
-    // tslint:disable-next-line:max-line-length
-    private async fetchUrlInfo(url: URL2, errorCode: TrackingItemErrorCodes, expectType?: string | undefined, maxRetryCount: number = 1): Promise<UrlCheckResult | null> {
+    private async fetchUrlInfo(url: URL2, errorCode: TrackingItemErrorCodes, expectType?: string | undefined,
+        maxRetryCount: number = 1): Promise<UrlCheckResult | null> {
         for (let retryCount = 0; retryCount < maxRetryCount; retryCount++) {
             Logger.verbose(GifConverter.TAG, `[${this.itemId}] Checking url ${url.href}`);
             const linkData = await this.checkUrlHead(url, expectType);
@@ -385,7 +388,8 @@ export default class GifConverter {
             if (linkData.statusCode !== 404) {
                 return linkData;
             } else if (retryCount + 1 < maxRetryCount) {
-                Logger.verbose(GifConverter.TAG, `[${this.itemId}] Got 404 url status, ${retryCount + 1 < maxRetryCount ? "retrying" : "aborting"}`);
+                Logger.verbose(GifConverter.TAG, `[${this.itemId}] Got 404 url status, ${
+                    retryCount + 1 < maxRetryCount ? "retrying" : "aborting"}`);
                 await delay(generalDeferDelayTime);
             }
         }
@@ -472,8 +476,8 @@ export default class GifConverter {
             } else if (result.task === "encoding") {
                 await delay(gfycatUploadStatusCheckDelay);
             } else if (result.task === "error" || result.task === "NotFoundo") {
-                // tslint:disable-next-line:max-line-length
-                Logger.warn(GifConverter.TAG, `[${this.itemId}] Gif upload failed with task result '${result.task}' and description '${result.errorMessage ? result.errorMessage.description : "<unknown>"}'`);
+                Logger.warn(GifConverter.TAG, `[${this.itemId}] Gif upload failed with task result '${result.task}' and description '${
+                    result.errorMessage ? result.errorMessage.description : "<unknown>"}'`);
                 this.tracker.endTracking(TrackingStatus.ERROR, {
                     errorCode: TrackingItemErrorCodes.NO_MP4_LOCATION,
                     errorDetail: TrackingErrorDetails.GFYCAT_ERROR,

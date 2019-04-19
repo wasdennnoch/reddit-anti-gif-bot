@@ -74,17 +74,17 @@ export default class BotUtils {
         return false;
     }
 
-    // tslint:disable-next-line:max-line-length
-    public async createReplyAndReply(itemData: GifItemData[], itemType: ItemTypes, replyTo: ReplyableContentWithAuthor<any>, trackers: ItemTracker[], itemId: string, subreddit: string, sendDMInstead: boolean = false): Promise<void> {
+    public async createReplyAndReply(itemData: GifItemData[], itemType: ItemTypes, replyTo: ReplyableContentWithAuthor<any>,
+        trackers: ItemTracker[], itemId: string, subreddit: string, sendDMInstead: boolean = false): Promise<void> {
         const replyText = await this.assembleReply(itemData, itemType, subreddit);
         await this.doReply(replyTo, replyText, trackers, itemId, subreddit, sendDMInstead);
     }
 
-    // tslint:disable-next-line:max-line-length
-    public async doReply(replyTo: ReplyableContentWithAuthor<any>, replyText: string, trackers: ItemTracker[], itemId: string, subreddit: string, sendDMInstead: boolean = false): Promise<void> {
+    public async doReply(replyTo: ReplyableContentWithAuthor<any>, replyText: string, trackers: ItemTracker[], itemId: string,
+        subreddit: string, sendDMInstead: boolean = false): Promise<void> {
         try {
-            // tslint:disable-next-line:max-line-length
-            Logger.debug(BotUtils.TAG, `[${itemId}] Reply in ${subreddit} (sendDMInstead: ${sendDMInstead}): ${replyText.substring(0, 150).replace(/\r?\n/g, "-\\n-")}...`);
+            Logger.debug(BotUtils.TAG, `[${itemId}] Reply in ${subreddit} (sendDMInstead: ${sendDMInstead}): ${
+                replyText.substring(0, 150).replace(/\r?\n/g, "-\\n-")}...`);
             if (process.env.NODE_ENV === "production") {
                 if (sendDMInstead) {
                     await this.snoo.composeMessage({

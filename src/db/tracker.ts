@@ -20,8 +20,8 @@ export enum TrackingItemErrorCodes {
     HEAD_FAILED_GIF = "head-failed-gif",         // The HEAD request(s) to the gif file failed (invalid url/host unreachabe etc)
     HEAD_FAILED_MP4 = "head-failed-mp4",         // The HEAD request(s) to the mp4 file failed (invalid url/host unreachabe etc)
     MP4_BIGGER_THAN_GIF = "mp4-bigger-than-gif", // The MP4 file was bigger than the gif while when it was not allowed to be
-    CACHED = "cached",                           // When the link was processed previously an error occurred and it will not be processed again
-    TRACKER_NOT_ENDED = "tracker-not-ended",     // The endTracking method was never called after processing finished - this should not happen!
+    CACHED = "cached",                           // If the link has been processed already and an error occurred it won't be processed again
+    TRACKER_NOT_ENDED = "tracker-not-ended",     // The endTracking method was not called after processing finished - this shouldn't happen!
     UNKNOWN = "unknown",
 }
 
@@ -166,8 +166,8 @@ export default class Tracker {
         }
     }
 
-    // tslint:disable-next-line:max-line-length
-    public static trackNewGifItem(type: ItemTypes, gifUrl: URL2, redditId: string, subreddit: string | undefined, timeCreated: Date, timeStart: Date = new Date()): ItemTracker {
+    public static trackNewGifItem(type: ItemTypes, gifUrl: URL2, redditId: string, subreddit: string | undefined,
+        timeCreated: Date, timeStart: Date = new Date()): ItemTracker {
         const host = gifUrl.hostname;
         updateQueue.domainCounts[host] = (updateQueue.domainCounts[host] || 0) + 1;
         const sub = subreddit as string;
@@ -209,8 +209,8 @@ export class ItemTracker {
     private data: Partial<TrackingItemEntry>;
     private trackingStopped: boolean = false;
 
-    // tslint:disable-next-line:max-line-length
-    public static endTrackingArray(trackers: ItemTracker[], status: TrackingStatus, finalUpdates?: Partial<TrackingItemEntry>, checkTrackingEnded: boolean = false): void {
+    public static endTrackingArray(trackers: ItemTracker[], status: TrackingStatus, finalUpdates?: Partial<TrackingItemEntry>,
+        checkTrackingEnded: boolean = false): void {
         for (const tracker of trackers) {
             if (!checkTrackingEnded || !tracker.trackingEnded) {
                 tracker.endTracking(status, finalUpdates);
@@ -218,7 +218,8 @@ export class ItemTracker {
         }
     }
 
-    constructor(type: ItemTypes, gifUrl: URL2, redditId: string, subreddit: string | undefined, timeCreated: Date, timeStart: Date = new Date()) {
+    constructor(type: ItemTypes, gifUrl: URL2, redditId: string, subreddit: string | undefined,
+        timeCreated: Date, timeStart: Date = new Date()) {
         this.data = {
             itemType: type,
             createdAt: timeCreated,

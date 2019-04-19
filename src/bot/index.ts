@@ -87,7 +87,8 @@ export default class AntiGifBot {
                 return;
             }
 
-            const extracts = await this.extractAndPrepareUrlsFromString(content, ItemTypes.SUBMISSION, subreddit, itemId, submission.created_utc);
+            const extracts = await this.extractAndPrepareUrlsFromString(content, ItemTypes.SUBMISSION,
+                subreddit, itemId, submission.created_utc);
             trackers = extracts.trackers;
             await this.processRedditItem(ItemTypes.SUBMISSION, extracts,
                 `https://redd.it/${submission.id}`,
@@ -143,9 +144,10 @@ export default class AntiGifBot {
             const subject = message.subject;
 
             if (!author) {
-                if (subreddit && !message.was_comment && !message.parent_id && !message.num_comments && message.distinguished === "moderator" && subject &&
+                if (subreddit && !message.was_comment && !message.parent_id && !message.num_comments &&
+                    message.distinguished === "moderator" && subject &&
                     (/^You've been (temporarily )?banned from participating in /.test(subject) ||
-                    /^Your ban from \/?r\/.+? has changed$/.test(subject)) &&
+                        /^Your ban from \/?r\/.+? has changed$/.test(subject)) &&
                     /^You have been (temporarily )?banned from participating in /.test(content)) {
                     // Technically someone could fake this by sending a modmail from their subreddit.
                     // But, who cares, you'd just blacklist yourself as I use the message's actual subreddit source, not the title.
@@ -275,7 +277,8 @@ export default class AntiGifBot {
                 }
             } else {
                 // TODO subreddit is probably null, is that okay?
-                const extracts = await this.extractAndPrepareUrlsFromString(content, ItemTypes.INBOX, subreddit, itemId, message.created_utc);
+                const extracts = await this.extractAndPrepareUrlsFromString(content, ItemTypes.INBOX,
+                    subreddit, itemId, message.created_utc);
                 trackers = extracts.trackers;
                 const onlyIgnoredItems = !await this.processRedditItem(ItemTypes.INBOX, extracts,
                     `https://reddit.com/message/messages/${message.id}`,
@@ -300,12 +303,14 @@ export default class AntiGifBot {
 
     // Returns `true` if all items have been processed successfully (or if there weren't any).
     // Returns `false` instead if there were items but all of them have been ignored due to exceptions.
-    // tslint:disable-next-line:max-line-length
-    private async processRedditItem(type: ItemTypes, data: UrlTrackerMix, fullLink: string, itemId: string, subreddit: string, author: string, over18: boolean, replyTo: ReplyableContentWithAuthor<any>, ignoreSubredditUserExceptions: boolean = false): Promise<boolean> {
+    private async processRedditItem(type: ItemTypes, data: UrlTrackerMix, fullLink: string, itemId: string,
+        subreddit: string, author: string, over18: boolean, replyTo: ReplyableContentWithAuthor<any>,
+        ignoreSubredditUserExceptions: boolean = false): Promise<boolean> {
         if (!data.urls.length) {
             return true;
         }
-        Logger.verbose(AntiGifBot.TAG, `[${itemId}] -> Identified ${type} with GIF links | Subreddit: ${subreddit} | Link count: ${data.urls.length}`);
+        Logger.verbose(AntiGifBot.TAG,
+            `[${itemId}] -> Identified ${type} with GIF links | Subreddit: ${subreddit} | Link count: ${data.urls.length}`);
         const [
             isSubredditException,
             isUserException,
@@ -319,7 +324,8 @@ export default class AntiGifBot {
         for (let i = 0; i < data.urls.length; i++) {
             const url = data.urls[i];
             const tracker = data.trackers[i];
-            Logger.verbose(AntiGifBot.TAG, `[${itemId}] -> Identified ${type} link as GIF link | Subreddit: ${subreddit} | Link: ${url.href}`);
+            Logger.verbose(AntiGifBot.TAG,
+                `[${itemId}] -> Identified ${type} link as GIF link | Subreddit: ${subreddit} | Link: ${url.href}`);
             const gifConverter = new GifConverter(this.db, url, itemId, fullLink, over18, tracker, subreddit);
             if (!ignoreSubredditUserExceptions && (isSubredditException || isUserException)) {
                 // Still track gif sizes
@@ -339,8 +345,8 @@ export default class AntiGifBot {
 
             const mp4BiggerThanGif = itemData.mp4Size > itemData.gifSize;
             if (mp4BiggerThanGif && !await this.db.isMp4BiggerAllowedDomain(url.domain)) {
-                // tslint:disable-next-line:max-line-length
-                Logger.info(AntiGifBot.TAG, `[${itemId}] MP4 is bigger than GIF (MP4: ${getReadableFileSize(itemData.mp4Size)} (${itemData.mp4Size}), GIF: ${getReadableFileSize(itemData.gifSize)} (${itemData.gifSize}))`);
+                Logger.info(AntiGifBot.TAG, `[${itemId}] MP4 is bigger than GIF (MP4: ${getReadableFileSize(itemData.mp4Size)} (${
+                    itemData.mp4Size}), GIF: ${getReadableFileSize(itemData.gifSize)} (${itemData.gifSize}))`);
                 tracker.endTracking(TrackingStatus.IGNORED, { errorCode: TrackingItemErrorCodes.MP4_BIGGER_THAN_GIF });
                 continue;
             }
@@ -350,15 +356,15 @@ export default class AntiGifBot {
         }
 
         if (processedItemData.length) {
-            // tslint:disable-next-line:max-line-length
-            await this.botUtils.createReplyAndReply(processedItemData, type, replyTo, processedTrackers, itemId, subreddit, isSubredditException && ignoreSubredditUserExceptions);
+            await this.botUtils.createReplyAndReply(processedItemData, type, replyTo, processedTrackers, itemId, subreddit,
+                isSubredditException && ignoreSubredditUserExceptions);
             return true;
         }
         return false;
     }
 
-    // tslint:disable-next-line:max-line-length
-    private async extractAndPrepareUrlsFromString(content: string, type: ItemTypes, subreddit: string, itemId: string, createdUtc: number): Promise<UrlTrackerMix> {
+    private async extractAndPrepareUrlsFromString(content: string, type: ItemTypes, subreddit: string, itemId: string,
+        createdUtc: number): Promise<UrlTrackerMix> {
         const urlMatches = content.match(urlRegex);
         const urls: URL2[] = [];
         const trackers: ItemTracker[] = [];
@@ -384,7 +390,8 @@ export default class AntiGifBot {
         };
     }
 
-    private async _processURL(gifConverter: GifConverter, url: URL2, isException: boolean, tracker: ItemTracker): Promise<GifItemData | null> {
+    private async _processURL(gifConverter: GifConverter, url: URL2, isException: boolean,
+        tracker: ItemTracker): Promise<GifItemData | null> {
         const isDomainException = this.db.isException(LocationTypes.DOMAIN, url.domain);
         if (isException || isDomainException) {
             if (isException) {

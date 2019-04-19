@@ -113,7 +113,8 @@ export default class Database {
     }
 
     public async getGifSizeThreshold(type: LocationTypes, location: string): Promise<number> {
-        return +(await this.getSetting("customGifSizeThresholds", `${type}-${location}`) || await this.getSetting("defaultGifSizeThreshold") || 2_000_000);
+        return +(await this.getSetting("customGifSizeThresholds", `${type}-${location}`) ||
+            await this.getSetting("defaultGifSizeThreshold") || 2_000_000);
     }
 
     public async getReplyTemplates(): Promise<ReplyTemplates> {
