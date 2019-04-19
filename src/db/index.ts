@@ -7,7 +7,6 @@ import { LocationTypes } from "../types";
 export enum ExceptionSources {
     BAN_DM = "ban-dm",
     BAN_ERROR = "ban-error",
-    USER_REPLY = "user-reply",
     USER_DM = "user-dm",
     MANUAL = "manual",
     UNKNOWN = "unknown",
@@ -147,9 +146,6 @@ export default class Database {
     }
 
     public async addException(data: ExceptionEntryInput): Promise<void> {
-        if (data.duration && !data.createdAt) {
-            throw new Error("Can't use duration without createdAt");
-        }
         await this.insertItemIntoPostgres("exceptions", {
             ...data,
             endsAt: data.createdAt && data.duration ? new Date(+data.createdAt + data.duration) : null,

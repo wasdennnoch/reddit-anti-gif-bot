@@ -136,14 +136,43 @@ export default class AntiGifBot {
         let trackers: ItemTracker[] = [];
         try {
             Tracker.trackNewIncomingItem(ItemTypes.INBOX);
-            const subreddit = message.subreddit.display_name; // Comment reply
+            const subreddit = message.subreddit.display_name; // Filled in for comment reply and modmail
             const itemId = message.name;
             const author = message.author.name;
             const content = message.body.replace(/\r/g, "");
             const subject = message.subject;
-            const wasComment = message.was_comment;
-            const distinguished = message.distinguished; // null, "mod(erator)?", "admin", "gold-auto"
-            if (subject === "exclude me") {
+
+            if (!author) {
+                if (subreddit && !message.was_comment && !message.parent_id && !message.num_comments && message.distinguished === "moderator" && subject &&
+                    (/^You've been (temporarily )?banned from participating in /.test(subject) ||
+                    /^Your ban from \/?r\/.+? has changed$/.test(subject)) &&
+                    /^You have been (temporarily )?banned from participating in /.test(content)) {
+                    // Technically someone could fake this by sending a modmail from their subreddit.
+                    // But, who cares, you'd just blacklist yourself as I use the message's actual subreddit source, not the title.
+                    let reason = null;
+                    if (content.includes("Note from the moderators:")) {
+                        const lines = content.split("\n");
+                        reason = lines.slice(4, lines.length - 4).map(l => l.substring(2)).join("\n");
+                    }
+                    const isTempBan = subject.startsWith("You've been temporarily");
+                    let banTime = null;
+                    if (isTempBan) {
+                        const timeIndex = content.indexOf("This ban will last for ") + 23;
+                        const endIndex = content.indexOf("days. ", timeIndex);
+                        const timeInDays = content.substring(timeIndex, endIndex);
+                        banTime = +timeInDays * 24 * 60 * 60 * 1000;
+                    }
+                    await this.db.addException({
+                        type: LocationTypes.SUBREDDIT,
+                        location: subreddit,
+                        source: ExceptionSources.BAN_DM,
+                        reason: reason || undefined,
+                        duration: banTime || undefined,
+                        createdAt: new Date(message.created_utc * 1000),
+                    });
+                }
+                return;
+            } else if (subject === "exclude me") {
                 /*
                 Reason: <please enter your reason here>
                 */
@@ -227,9 +256,8 @@ export default class AntiGifBot {
                 }
                 return;
             }
-            // TODO subreddit bans (permanent and temp). What about mutes? Are those only for DMs after a ban?
 
-            if (wasComment) {
+            if (message.was_comment) {
                 // --- TODO ability to "summon" the bot ---
                 if (/^\/?u\/anti-gif-bot/.test(content)) {
                     const parentId = message.parent_id;
@@ -237,11 +265,16 @@ export default class AntiGifBot {
                     const parentIsSubmission = parentId.startsWith("t3_");
                     const originalSubmissionId = message.context.replace(/\/r\/.+?\/comments\//, "").replace(/\/.+$/, ""); // Thanks Reddit
                     // TODO basically like comment reply but with an exception override?
-                    // If the comment is a top-level reply, use the submission url/content.
-                    // If the comment replies to another comment that contains gif urls, use that comment's content.
-                    // If the comment replies to another comment that does not contain gif urls - fall back to the post again?
+                    if (parentIsSubmission) {
+                        const submission = this.snoo.getSubmission(originalSubmissionId);
+                        // If the comment is a top-level reply, use the submission url/content.
+                    } else if (parentIsComment) {
+                        // If the comment replies to another comment that contains gif urls, use that comment's content.
+                        // If the comment replies to another comment that does not contain gif urls - fall back to the post again?
+                    }
                 }
             } else {
+                // TODO subreddit is probably null, is that okay?
                 const extracts = await this.extractAndPrepareUrlsFromString(content, ItemTypes.INBOX, subreddit, itemId, message.created_utc);
                 trackers = extracts.trackers;
                 const onlyIgnoredItems = !await this.processRedditItem(ItemTypes.INBOX, extracts,
