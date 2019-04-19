@@ -63,6 +63,6 @@ GRANT CONNECT ON DATABASE antigifbot TO antigifbot;
 GRANT USAGE ON SCHEMA public TO antigifbot;
 GRANT USAGE ON ALL SEQUENCES IN SCHEMA public TO antigifbot;
 GRANT SELECT, INSERT ON public.gifStats TO antigifbot;
-GRANT SELECT, INSERT ON public.exceptions TO antigifbot;
+GRANT SELECT, INSERT, DELETE ON public.exceptions TO antigifbot;
 GRANT SELECT, INSERT ON public.settings TO antigifbot;
 GRANT SELECT, INSERT ON public.redditStats TO antigifbot;

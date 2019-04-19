@@ -2,7 +2,7 @@ import Snoowrap = require("snoowrap");
 import Database, { ExceptionSources, ReplyTemplate, ReplyTemplates } from "../db";
 import { ItemTracker, TrackingItemErrorCodes, TrackingStatus } from "../db/tracker";
 import Logger from "../logger";
-import { ItemTypes, LocationTypes, ReplyableContentWithAuthor, ReplyTypes } from "../types";
+import { ItemTypes, LocationTypes, ReplyableContentWithAuthor } from "../types";
 import { delay, getReadableFileSize, toFixedFixed, version } from "../utils";
 import { GifItemData } from "./gifConverter";
 import URL2 from "./url2";
@@ -14,28 +14,28 @@ export default class BotUtils {
     constructor(readonly db: Database, readonly snoo: Snoowrap) { }
 
     public async assembleReply(itemData: GifItemData[], itemType: ItemTypes, subreddit: string | "dm"): Promise<string> {
-        const replyTemplates = await this.getReplyTemplatesForItemType(itemType);
-        const singleOrMulti = itemType.length > 1 ? "multi" : "single";
+        const replyTemplates = await this.db.getReplyTemplates();
+        const singleOrMulti = itemData.length > 1 ? "multi" : "single";
         const replyPartsDefault = replyTemplates.default[singleOrMulti];
         const replyPartsSpecific = (replyTemplates[subreddit] || {})[singleOrMulti] || {};
         const replyParts: ReplyTemplate = Object.assign({}, replyPartsDefault, replyPartsSpecific);
         let hasGfycatItem = false;
-        let listItems = "";
+        let itemsList = "";
         for (let i = 0; i < itemData.length; i++) {
             const data = itemData[i];
             if (data.webmSize) {
                 hasGfycatItem = true;
             }
-            listItems += this.assembleReplySingleItem(replyParts, data, i + 1);
+            itemsList += this.assembleReplySingleItem(replyParts, data, i + 1);
             if (i < itemData.length - 1) { // If not the last item
-                listItems += replyParts.listItemDivider;
+                itemsList += replyParts.listItemDivider;
             }
         }
         const replyText = replyParts.base
-            .replace("{{itemList}}", listItems)
+            .replace("{{itemList}}", itemsList)
             .replace("{{footer}}", replyParts.footer)
             .replace("{{gfycatNotice}}", hasGfycatItem ? replyParts.gfycatNotice : "")
-            .replace("{{redditKind}}", itemType)
+            .replace("{{redditKind}}", this.itemTypeToString(itemType))
             .replace("{{version}}", version);
         return replyText;
     }
@@ -131,20 +131,15 @@ export default class BotUtils {
         }
     }
 
-    private calculateSavingPercentage(firstSize: number, secondSize: number): string {
-        return `${toFixedFixed((firstSize - secondSize) / firstSize * 100)}%`;
+    private itemTypeToString(type: ItemTypes): string {
+        if (type === ItemTypes.INBOX) {
+            return "private message";
+        }
+        return type;
     }
 
-    private async getReplyTemplatesForItemType(itemType: ItemTypes): Promise<ReplyTemplates> {
-        let replyType: ReplyTypes;
-        if (itemType === ItemTypes.SUBMISSION) {
-            replyType = ReplyTypes.GIF_POST;
-        } else if (itemType === ItemTypes.COMMENT) {
-            replyType = ReplyTypes.GIF_COMMENT;
-        } else {
-            throw new Error(`Can't get reply template for item type '${itemType}'`);
-        }
-        return await this.db.getReplyTemplates(replyType);
+    private calculateSavingPercentage(firstSize: number, secondSize: number): string {
+        return `${toFixedFixed((firstSize - secondSize) / firstSize * 100)}%`;
     }
 
     private parseWaitTimeFromRateLimit(message: string): number {

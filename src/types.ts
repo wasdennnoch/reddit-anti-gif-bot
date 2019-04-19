@@ -13,11 +13,6 @@ export enum ItemTypes {
     INBOX = "inbox",
 }
 
-export enum ReplyTypes {
-    GIF_POST = "gif-post",
-    GIF_COMMENT = "gif-comment",
-}
-
 // ReplyableContent doesn't have an author object; ReplyableContent does but PrivateMessage
 // doesn't extend ReplyableContent and instead has its own author object.
 // This interface ensures that passed ReplyableContent objects have an author as well.

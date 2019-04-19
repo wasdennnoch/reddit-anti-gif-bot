@@ -2,7 +2,7 @@ import IORedis = require("ioredis");
 import { Client } from "pg";
 import { GifItemData } from "../bot/gifConverter";
 import Logger from "../logger";
-import { LocationTypes, ReplyTypes } from "../types";
+import { LocationTypes } from "../types";
 
 export enum ExceptionSources {
     BAN_DM = "ban-dm",
@@ -65,6 +65,26 @@ export interface ReplyTemplate {
     temporaryGifWarning: string;
 }
 
+const emptyReplyTemplate: ReplyTemplate = {
+    base: "",
+    footer: "",
+    listItemDivider: "",
+    gfycatNotice: "",
+    listItem: "",
+    gifBiggerThanMp4: "",
+    mp4BiggerThanGif: "",
+    webmSmaller: "",
+    noiseWarning: "",
+    temporaryGifWarning: "",
+};
+
+const emptyReplyTemplates: ReplyTemplates = {
+    default: {
+        single: emptyReplyTemplate,
+        multi: emptyReplyTemplate,
+    },
+};
+
 export default class Database {
 
     private static readonly TAG = "Database";
@@ -97,8 +117,9 @@ export default class Database {
         return +(await this.getSetting("customGifSizeThresholds", `${type}-${location}`) || await this.getSetting("defaultGifSizeThreshold") || 2_000_000);
     }
 
-    public async getReplyTemplates(type: ReplyTypes): Promise<ReplyTemplates> {
-        return JSON.parse(await this.getSetting("replyTemplates", type) || "{}");
+    public async getReplyTemplates(): Promise<ReplyTemplates> {
+        const s = await this.getSetting("replyTemplates");
+        return s ? JSON.parse(s) : emptyReplyTemplates;
     }
 
     public async isMp4BiggerAllowedDomain(domain: string): Promise<boolean> {
@@ -197,16 +218,11 @@ export default class Database {
             Logger.info(Database.TAG, "Setting up default database values...");
             await this.postgres.query("INSERT INTO settings (key, value) VALUES ($1, $2);", ["ingestSourceOrder", '["snoowrap"]']);
             await this.postgres.query("INSERT INTO settings (key, value) VALUES ($1, $2);", ["defaultGifSizeThreshold", "2000000"]);
-            const emptyReplyTemplate = JSON.stringify({
-                base: "",
-                parts: {
-                    default: {},
-                },
-            });
+            const templates = JSON.stringify(emptyReplyTemplates);
             await this.postgres.query(
-                "INSERT INTO settings (key, key2, value) VALUES ($1, $2, $3);", ["replyTemplates", ReplyTypes.GIF_POST, emptyReplyTemplate]);
+                "INSERT INTO settings (key, value) VALUES ($1, $2);", ["replyTemplates", templates]);
             await this.postgres.query(
-                "INSERT INTO settings (key, key2, value) VALUES ($1, $2, $3);", ["replyTemplates", ReplyTypes.GIF_COMMENT, emptyReplyTemplate]);
+                "INSERT INTO settings (key, value) VALUES ($1, $2);", ["replyTemplates", templates]);
             await this.postgres.query("INSERT INTO settings (key, value) VALUES ($1, $2);", ["setup", "true"]);
         }
     }

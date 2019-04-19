@@ -143,7 +143,7 @@ export default class AntiGifBot {
             const subject = message.subject;
             const wasComment = message.was_comment;
             const distinguished = message.distinguished; // null, "mod(erator)?", "admin", "gold-auto"
-            if (subject === "excludeme") {
+            if (subject === "exclude me") {
                 /*
                 Reason: <please enter your reason here>
                 */
@@ -173,11 +173,11 @@ export default class AntiGifBot {
                         "ignore you - that way other users who _want_ to see my replies are still able to do so. ",
                         "Don't forget to remove yourself from the user blacklist before blocking me! ",
                         "More information on that can be found [in my wiki](https://reddit.com/r/anti_gif_bot/wiki/index).\n\n",
-                        "If you'd like to reverse this action, simply send me a DM with the subject `excludeme` again.",
+                        "If you'd like to reverse this action, simply send me a DM with the subject `exclude me` again.",
                     ].join("")) as Promise<any>); // TS shenanigans
                 }
                 return;
-            } else if (subject === "excludesubreddit") {
+            } else if (subject === "exclude subreddit") {
                 /*
                 r/<put your subreddit name here>
                 Reason: <please enter your reason here>
@@ -221,23 +221,31 @@ export default class AntiGifBot {
                     await (message.reply([
                         `You have successfully added /r/${sub} to the subreddit blacklist. `,
                         "I will not reply to any gif submissions or comments in that subreddit anymore.\n\n",
-                        "If you'd like to reverse this action, simply send me a DM with the subject `excludesubreddit` ",
+                        "If you'd like to reverse this action, simply send me a DM with the subject `exclude subreddit` ",
                         "and the subreddit name again.",
                     ].join("")) as Promise<any>); // TS shenanigans
                 }
                 return;
             }
+            // TODO subreddit bans (permanent and temp). What about mutes? Are those only for DMs after a ban?
 
             if (wasComment) {
                 // --- TODO ability to "summon" the bot ---
-                if (content.startsWith("/u/anti-gif-bot")) {
+                if (/^\/?u\/anti-gif-bot/.test(content)) {
+                    const parentId = message.parent_id;
+                    const parentIsComment = parentId.startsWith("t1_");
+                    const parentIsSubmission = parentId.startsWith("t3_");
+                    const originalSubmissionId = message.context.replace(/\/r\/.+?\/comments\//, "").replace(/\/.+$/, ""); // Thanks Reddit
                     // TODO basically like comment reply but with an exception override?
+                    // If the comment is a top-level reply, use the submission url/content.
+                    // If the comment replies to another comment that contains gif urls, use that comment's content.
+                    // If the comment replies to another comment that does not contain gif urls - fall back to the post again?
                 }
             } else {
                 const extracts = await this.extractAndPrepareUrlsFromString(content, ItemTypes.INBOX, subreddit, itemId, message.created_utc);
                 trackers = extracts.trackers;
                 const onlyIgnoredItems = !await this.processRedditItem(ItemTypes.INBOX, extracts,
-                    `https://www.reddit.com/message/messages/${message.id}`,
+                    `https://reddit.com/message/messages/${message.id}`,
                     itemId, "dm", author, false, message);
                 if (onlyIgnoredItems) {
                     await (message.reply([
